@@ -1,0 +1,10 @@
+# 폐기물 분류 프로젝트 의존성 패키지
+# 설치 명령어: pip install -r requirements.txt
+
+ultralytics>=8.0.0   # YOLOv8 (학습 + 추론)
+opencv-python>=4.8.0 # 웹캠 + 이미지 처리
+gradio>=4.0.0        # 웹 데모 UI
+Pillow>=10.0.0       # 이미지 로딩
+pandas>=2.0.0        # 데이터 정리
+matplotlib>=3.7.0    # 결과 시각화
+PyYAML>=6.0          # data.yaml 처리
