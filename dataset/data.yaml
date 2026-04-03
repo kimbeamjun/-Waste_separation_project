@@ -1,0 +1,7 @@
+path: C:/Users/LMS/Desktop/waste_classifier/dataset
+train: images/train
+val:   images/val
+test:  images/test
+
+nc: 5
+names: ['snack_bag', 'glass_bottle', 'paper', 'can', 'pet_bottle']

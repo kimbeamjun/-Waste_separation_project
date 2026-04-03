@@ -15,7 +15,8 @@ from pathlib import Path
 # ────────────────────────────────────────────────
 # 설정값 (본인 경로에 맞게 수정)
 # ────────────────────────────────────────────────
-RAW_DATA_ROOT = "./raw_data"          # 압축 해제한 원본 데이터 폴더
+TRAINING_DIR   = r"C:\Users\lms\Downloads\생활 폐기물 이미지\Training"
+VALIDATION_DIR = r"C:\Users\lms\Downloads\생활 폐기물 이미지\Validation"
 OUTPUT_ROOT   = "./dataset"           # YOLO 포맷으로 변환된 결과 폴더
 SAMPLE_RATIO  = 0.15                  # 전체 데이터 중 사용할 비율 (15%)
 SPLIT_RATIO   = (0.8, 0.1, 0.1)      # Train / Val / Test 비율
