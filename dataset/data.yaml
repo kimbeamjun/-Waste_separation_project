@@ -1,3 +1,4 @@
+# YOLOv8 데이터셋 설정
 path: C:/Users/LMS/Desktop/waste_classifier/dataset
 train: images/train
 val:   images/val

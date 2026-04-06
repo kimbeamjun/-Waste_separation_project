@@ -1,167 +1,174 @@
 """
-[1단계] 데이터 전처리 스크립트
-AI 허브 데이터셋 → YOLO 포맷 변환 + Train/Val/Test 분할
+[1단계] 데이터 전처리 스크립트 - Classification 버전
+이미지를 클래스별 폴더로 정리 (YOLOv8 Classification 포맷)
 
 실행 환경: PyCharm 로컬 (Windows 10)
 실행 방법: python step1_preprocess.py
+
+결과 폴더 구조:
+dataset/
+├── train/
+│   ├── snack_bag/
+│   ├── glass_bottle/
+│   ├── paper/
+│   ├── can/
+│   └── pet_bottle/
+├── val/
+│   └── (동일 구조)
+└── test/
+    └── (동일 구조)
 """
 
-import os
-import json
 import shutil
 import random
 from pathlib import Path
 
-# ────────────────────────────────────────────────
-# 설정값 (본인 경로에 맞게 수정)
-# ────────────────────────────────────────────────
+# ════════════════════════════════════════════════
+# ★ 경로 설정
+# ════════════════════════════════════════════════
 TRAINING_DIR   = r"C:\Users\lms\Downloads\생활 폐기물 이미지\Training"
 VALIDATION_DIR = r"C:\Users\lms\Downloads\생활 폐기물 이미지\Validation"
-OUTPUT_ROOT   = "./dataset"           # YOLO 포맷으로 변환된 결과 폴더
-SAMPLE_RATIO  = 0.15                  # 전체 데이터 중 사용할 비율 (15%)
-SPLIT_RATIO   = (0.8, 0.1, 0.1)      # Train / Val / Test 비율
+OUTPUT_ROOT    = "./dataset"
 
-# 5개 클래스 정의 (AI 허브 카테고리명 → 우리 클래스명)
-CLASS_MAP = {
-    "비닐_과자봉지": 0,   # snack_bag (비닐/과자봉지/과자봉지)
-    "과자봉지":      0,
-    "유리병":        1,   # glass_bottle (유리병/음료수병)
-    "음료수병":      1,
-    "종이류":        2,   # paper (종이류/포장상자)
-    "포장상자":      2,
-    "캔":            3,   # can (캔/음료수캔)
-    "음료수캔":      3,
-    "페트병":        4,   # pet_bottle (페트병)
+SAMPLE_PER_CLASS     = 300   # Train 클래스당 최대 이미지 수
+VAL_SAMPLE_PER_CLASS = 80    # Validation 클래스당 최대 이미지 수
+TEST_RATIO           = 0.2   # Validation 중 Test로 분리할 비율
+RANDOM_SEED          = 42
+
+# ════════════════════════════════════════════════
+# 클래스 정의 (폴더명 키워드 → 클래스명)
+# ════════════════════════════════════════════════
+FOLDER_CLASS_MAP = {
+    "비닐":    "snack_bag",
+    "과자봉지": "snack_bag",
+    "유리병":  "glass_bottle",
+    "음료수병": "glass_bottle",
+    "종이류":  "paper",
+    "포장상자": "paper",
+    "캔":      "can",
+    "음료수캔": "can",
+    "페트병":  "pet_bottle",
 }
 
 CLASS_NAMES = ["snack_bag", "glass_bottle", "paper", "can", "pet_bottle"]
 
 
-def convert_bbox_to_yolo(img_w, img_h, x1, y1, x2, y2):
+def get_class_name(folder_name: str):
+    """폴더명 키워드로 클래스명 반환"""
+    for keyword, cls_name in FOLDER_CLASS_MAP.items():
+        if keyword in folder_name:
+            return cls_name
+    return None
+
+
+def collect_images(base_dir: Path, sample_per_class: int):
     """
-    AI 허브 바운딩박스(절대좌표) → YOLO 포맷(상대좌표) 변환
-    YOLO 포맷: cx cy w h (모두 0~1 사이 비율값)
+    base_dir 하위 폴더를 탐색해서 클래스별로 이미지 경로 수집 후 샘플링
+    반환: [(img_path, class_name), ...]
     """
-    cx = ((x1 + x2) / 2) / img_w
-    cy = ((y1 + y2) / 2) / img_h
-    w  = (x2 - x1) / img_w
-    h  = (y2 - y1) / img_h
-    return cx, cy, w, h
+    class_buckets = {name: [] for name in CLASS_NAMES}
 
+    for folder in sorted(base_dir.iterdir()):
+        if not folder.is_dir():
+            continue
 
-def parse_aihub_json(json_path):
-    """
-    AI 허브 JSON 라벨 파일 파싱
-    반환값: [(class_id, cx, cy, w, h), ...]
-    """
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        cls_name = get_class_name(folder.name)
+        if cls_name is None:
+            print(f"  스킵 (매핑 없음): {folder.name}")
+            continue
 
-    annotations = []
-    img_w = data["images"]["width"]
-    img_h = data["images"]["height"]
+        print(f"  탐색: {folder.name} → [{cls_name}]")
 
-    for ann in data.get("annotations", []):
-        category = ann.get("category", "")
-        if category not in CLASS_MAP:
-            continue  # 우리 클래스가 아닌 항목은 스킵
+        # 하위 폴더까지 재귀 탐색
+        imgs = (list(folder.rglob("*.jpg")) +
+                list(folder.rglob("*.jpeg")) +
+                list(folder.rglob("*.png")) +
+                list(folder.rglob("*.JPG")) +
+                list(folder.rglob("*.JPEG")) +
+                list(folder.rglob("*.PNG")))
 
-        class_id = CLASS_MAP[category]
-        bbox = ann["bbox"]           # [x1, y1, x2, y2] 형식
-        cx, cy, w, h = convert_bbox_to_yolo(img_w, img_h, *bbox)
-        annotations.append((class_id, cx, cy, w, h))
+        class_buckets[cls_name].extend(imgs)
 
-    return annotations
+    # 클래스별 샘플링
+    random.seed(RANDOM_SEED)
+    result = []
+    print()
+    for cls_name in CLASS_NAMES:
+        imgs = class_buckets[cls_name]
+        n = min(sample_per_class, len(imgs))
+        sampled = random.sample(imgs, n) if n > 0 else []
+        print(f"  [{cls_name:15s}] 전체 {len(imgs):5d}개 → {n}개 샘플링")
+        for img_path in sampled:
+            result.append((img_path, cls_name))
+
+    return result
 
 
 def build_dataset():
-    """
-    전체 데이터 전처리 파이프라인
-    1. JSON 라벨 파싱
-    2. 샘플링
-    3. Train/Val/Test 분할
-    4. YOLO 포맷 저장
-    """
-    print("=" * 50)
-    print("[1단계] 데이터 전처리 시작")
-    print("=" * 50)
+    print("=" * 55)
+    print("  [1단계] 데이터 전처리 시작 (Classification)")
+    print("=" * 55)
+    print(f"  Training   : {TRAINING_DIR}")
+    print(f"  Validation : {VALIDATION_DIR}")
+    print(f"  출력        : {OUTPUT_ROOT}")
+    print()
 
-    # 출력 폴더 생성
+    # 출력 폴더 생성 (클래스별 하위 폴더 포함)
     for split in ["train", "val", "test"]:
-        Path(f"{OUTPUT_ROOT}/images/{split}").mkdir(parents=True, exist_ok=True)
-        Path(f"{OUTPUT_ROOT}/labels/{split}").mkdir(parents=True, exist_ok=True)
+        for cls_name in CLASS_NAMES:
+            Path(f"{OUTPUT_ROOT}/{split}/{cls_name}").mkdir(parents=True, exist_ok=True)
 
-    # 이미지-라벨 쌍 수집
-    all_pairs = []  # [(img_path, json_path), ...]
-    raw_path = Path(RAW_DATA_ROOT)
+    # ── Train 수집 ────────────────────────────────
+    print("[Train 이미지 수집]")
+    train_data = collect_images(Path(TRAINING_DIR), SAMPLE_PER_CLASS)
+    random.shuffle(train_data)
 
-    for img_path in raw_path.rglob("*.jpg"):
-        json_path = img_path.with_suffix(".json")
-        if json_path.exists():
-            all_pairs.append((img_path, json_path))
+    # ── Validation → Val + Test 분리 ──────────────
+    print("\n[Validation 이미지 수집]")
+    val_all = collect_images(Path(VALIDATION_DIR), VAL_SAMPLE_PER_CLASS)
+    random.shuffle(val_all)
 
-    print(f"총 발견된 이미지-라벨 쌍: {len(all_pairs)}개")
+    n_test    = int(len(val_all) * TEST_RATIO)
+    test_data = val_all[:n_test]
+    val_data  = val_all[n_test:]
 
-    # 샘플링
-    random.seed(42)
-    sample_size = int(len(all_pairs) * SAMPLE_RATIO)
-    sampled = random.sample(all_pairs, sample_size)
-    print(f"샘플링 후: {len(sampled)}개 ({SAMPLE_RATIO*100:.0f}%)")
+    print(f"\n최종 데이터셋 구성:")
+    print(f"  Train : {len(train_data)}개")
+    print(f"  Val   : {len(val_data)}개")
+    print(f"  Test  : {len(test_data)}개")
+    print()
 
-    # Train/Val/Test 분할
-    random.shuffle(sampled)
-    n = len(sampled)
-    n_train = int(n * SPLIT_RATIO[0])
-    n_val   = int(n * SPLIT_RATIO[1])
+    # ── 이미지 복사 ───────────────────────────────
+    for split_name, data in [("train", train_data),
+                              ("val",   val_data),
+                              ("test",  test_data)]:
+        print(f"[{split_name}] 복사 중... ({len(data)}개)")
+        for idx, (img_path, cls_name) in enumerate(data):
+            # 파일명 충돌 방지: 클래스명_인덱스.확장자
+            dst = Path(f"{OUTPUT_ROOT}/{split_name}/{cls_name}/"
+                       f"{cls_name}_{idx:05d}{img_path.suffix.lower()}")
+            shutil.copy2(img_path, dst)
+        print(f"  → 완료\n")
 
-    splits = {
-        "train": sampled[:n_train],
-        "val":   sampled[n_train:n_train + n_val],
-        "test":  sampled[n_train + n_val:],
-    }
-
-    # YOLO 포맷으로 저장
-    for split_name, pairs in splits.items():
-        print(f"\n[{split_name}] {len(pairs)}개 처리 중...")
-        skip_count = 0
-
-        for img_path, json_path in pairs:
-            try:
-                annotations = parse_aihub_json(json_path)
-                if not annotations:
-                    skip_count += 1
-                    continue
-
-                # 이미지 복사
-                dst_img = f"{OUTPUT_ROOT}/images/{split_name}/{img_path.name}"
-                shutil.copy(img_path, dst_img)
-
-                # YOLO 라벨 저장 (.txt)
-                dst_label = f"{OUTPUT_ROOT}/labels/{split_name}/{img_path.stem}.txt"
-                with open(dst_label, "w") as f:
-                    for cls_id, cx, cy, w, h in annotations:
-                        f.write(f"{cls_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n")
-
-            except Exception as e:
-                print(f"  오류 스킵: {img_path.name} → {e}")
-                skip_count += 1
-
-        print(f"  완료 ({skip_count}개 스킵)")
-
-    # data.yaml 생성 (YOLOv8 학습에 필요)
-    yaml_path = f"{OUTPUT_ROOT}/data.yaml"
-    with open(yaml_path, "w", encoding="utf-8") as f:
-        abs_path = str(Path(OUTPUT_ROOT).resolve()).replace("\\", "/")
-        f.write(f"path: {abs_path}\n")
-        f.write(f"train: images/train\n")
-        f.write(f"val:   images/val\n")
-        f.write(f"test:  images/test\n\n")
-        f.write(f"nc: {len(CLASS_NAMES)}\n")
-        f.write(f"names: {CLASS_NAMES}\n")
-
-    print(f"\n✅ data.yaml 생성 완료: {yaml_path}")
-    print("\n[1단계] 전처리 완료!")
+    print("=" * 55)
+    print("✅ 전처리 완료!")
+    print(f"   결과 폴더: {Path(OUTPUT_ROOT).resolve()}")
+    print()
+    print("다음 단계:")
+    print("  1. dataset/ 폴더를 Google Drive에 업로드")
+    print("  2. step2_train.py 를 Colab에서 실행")
+    print("=" * 55)
 
 
 if __name__ == "__main__":
-    build_dataset()
+    errors = []
+    if not Path(TRAINING_DIR).exists():
+        errors.append(f"❌ Training 폴더 없음:\n   {TRAINING_DIR}")
+    if not Path(VALIDATION_DIR).exists():
+        errors.append(f"❌ Validation 폴더 없음:\n   {VALIDATION_DIR}")
+
+    if errors:
+        print("\n".join(errors))
+        print("\n▶ 경로를 확인하고 ZIP 압축 해제 후 다시 실행하세요.")
+    else:
+        build_dataset()
