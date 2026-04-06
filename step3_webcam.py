@@ -18,6 +18,7 @@ import cv2
 import requests
 import numpy as np
 import time
+from PIL import Image, ImageDraw, ImageFont
 
 # ════════════════════════════════════════════════
 # 설정
@@ -29,8 +30,11 @@ HEALTH_URL      = f"{SERVER_URL}/health"
 
 CAMERA_INDEX    = 0      # 웹캠 번호
 SEND_INTERVAL   = 0.5    # 서버 전송 간격 (초)
-CONF_MIN        = 0.6    # 이 신뢰도 이하면 "불확실" 표시
+CONF_MIN        = 0.6    # 이 신뢰도 이하면 Uncertain 표시
 REQUEST_TIMEOUT = 3      # 서버 응답 대기 시간 (초)
+
+# 한글 폰트 경로 (Windows 기본 폰트)
+FONT_PATH = "C:/Windows/Fonts/malgun.ttf"   # 맑은 고딕
 
 # 클래스별 색상 (BGR)
 CLASS_COLORS = {
@@ -40,6 +44,32 @@ CLASS_COLORS = {
     "can":          (0,   0,   255),
     "pet_bottle":   (200, 0,   200),
 }
+
+# 한글 라벨
+CLASS_LABEL = {
+    "snack_bag":    "과자봉지 / 비닐",
+    "glass_bottle": "유리병 / 음료수병",
+    "paper":        "종이류 / 포장상자",
+    "can":          "캔 / 음료수캔",
+    "pet_bottle":   "페트병",
+}
+
+
+def put_korean_text(frame, text, pos, font_size=36, color=(255, 255, 255)):
+    """
+    OpenCV 프레임에 한글 텍스트 렌더링
+    PIL로 텍스트 그린 후 numpy 배열로 변환
+    """
+    try:
+        font     = ImageFont.truetype(FONT_PATH, font_size)
+        img_pil  = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        draw     = ImageDraw.Draw(img_pil)
+        draw.text(pos, text, font=font, fill=(color[2], color[1], color[0]))
+        return cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+    except Exception:
+        # 폰트 로드 실패 시 영문으로 대체
+        cv2.putText(frame, text, pos, cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
+        return frame
 
 
 def check_server():
@@ -79,30 +109,30 @@ def draw_result(frame: np.ndarray, result: dict, rtt_ms: float):
     h, w = frame.shape[:2]
 
     if "error" in result:
-        cv2.putText(frame, f"오류: {result['error']}", (10, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        frame = put_korean_text(frame, f"오류: {result['error']}", (10, 10),
+                                font_size=28, color=(255, 255, 255))
         return frame
 
     cls_name = result.get("class_name", "unknown")
-    cls_kor  = result.get("class_kor", "")
     conf     = result.get("confidence", 0.0)
     inf_ms   = result.get("inference_ms", 0.0)
     color    = CLASS_COLORS.get(cls_name, (255, 255, 255))
+    label    = CLASS_LABEL.get(cls_name, cls_name)
 
     if conf < CONF_MIN:
-        color   = (150, 150, 150)
-        cls_kor = "불확실"
+        color = (150, 150, 150)
+        label = "불확실"
 
     # 상단 결과 박스
-    cv2.rectangle(frame, (0, 0), (w, 55), color, -1)
-    cv2.putText(frame, f"{cls_kor}  {conf:.0%}", (12, 38),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 2)
+    cv2.rectangle(frame, (0, 0), (w, 65), color, -1)
+    frame = put_korean_text(frame, f"{label}  {conf:.0%}", (12, 12),
+                            font_size=38, color=(255, 255, 255))
 
     # 하단 정보 바
-    info = f"AI: {inf_ms:.0f}ms  RTT: {rtt_ms:.0f}ms  |  Q:종료  S:저장"
-    cv2.rectangle(frame, (0, h - 30), (w, h), (40, 40, 40), -1)
-    cv2.putText(frame, info, (10, h - 8),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
+    cv2.rectangle(frame, (0, h - 36), (w, h), (40, 40, 40), -1)
+    frame = put_korean_text(frame,
+                            f"AI: {inf_ms:.0f}ms  RTT: {rtt_ms:.0f}ms  |  Q: 종료  S: 저장",
+                            (10, h - 32), font_size=20, color=(200, 200, 200))
 
     return frame
 
@@ -120,8 +150,11 @@ def run():
         print(f"❌ 웹캠 연결 실패 (CAMERA_INDEX={CAMERA_INDEX})")
         return
 
-    print("✅ 웹캠 연결 성공")
-    print("   [Q] 종료  |  [S] 현재 프레임 저장\n")
+    WINDOW_TITLE = "Waste Classifier"   # 창 제목 (한글 깨짐 방지용 영문)
+    cv2.namedWindow(WINDOW_TITLE, cv2.WINDOW_NORMAL)
+
+    print("웹캠 연결 성공!")
+    print("  [Q] 종료  |  [S] 현재 프레임 저장\n")
 
     last_send   = 0.0
     last_result = {}
@@ -144,7 +177,7 @@ def run():
             last_send   = now
 
         display = draw_result(frame.copy(), last_result, rtt_ms)
-        cv2.imshow("폐기물 분류 AI 클라이언트", display)
+        cv2.imshow(WINDOW_TITLE, display)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
@@ -153,7 +186,7 @@ def run():
         elif key == ord("s"):
             path = f"./capture_{frame_idx:05d}.jpg"
             cv2.imwrite(path, display)
-            print(f"📸 저장: {path}")
+            print(f"저장 완료: {path}")
 
     cap.release()
     cv2.destroyAllWindows()
