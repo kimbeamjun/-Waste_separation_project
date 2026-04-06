@@ -1,26 +1,32 @@
-# 폐기물 분류 프로젝트 의존성 패키지
-# 설치 명령어: pip install -r requirements.txt
+# 폐기물 분류 프로젝트 전체 의존성
+# 설치: pip install -r requirements.txt
 
 # 핵심 AI
-ultralytics>=8.0.0    # YOLOv8 (학습 + 추론)
+ultralytics>=8.0.0        # YOLOv8 (학습 + 추론)
 
 # 이미지 처리
-opencv-python>=4.8.0  # 웹캠 + 이미지 처리
-Pillow>=10.0.0        # 이미지 로딩
+opencv-python>=4.8.0      # 웹캠 + 이미지 처리
+Pillow>=10.0.0            # 한글 폰트 렌더링 + 이미지 로딩
 
 # AI 서버 (step5)
-fastapi>=0.104.0      # API 서버 프레임워크
-uvicorn>=0.24.0       # ASGI 서버
-python-multipart>=0.0.6  # 이미지 파일 업로드 처리
-pydantic>=2.0.0       # 요청/응답 스키마
+fastapi>=0.104.0          # REST API 서버
+uvicorn>=0.24.0           # ASGI 서버
+python-multipart>=0.0.6   # 이미지 파일 업로드
+pydantic>=2.0.0           # 요청/응답 스키마
 
 # 클라이언트 (step3)
-requests>=2.31.0      # HTTP 클라이언트
+requests>=2.31.0          # HTTP 클라이언트
 
 # 웹 데모 (step4)
-gradio>=4.0.0         # 웹 데모 UI
+gradio>=4.0.0             # Gradio 웹 데모
+
+# 손 제스처 인식 (step7)
+mediapipe>=0.10.0         # 손 랜드마크 감지
 
 # 유틸
-pandas>=2.0.0         # 데이터 정리
-matplotlib>=3.7.0     # 결과 시각화
-PyYAML>=6.0           # yaml 처리
+pandas>=2.0.0             # 데이터 정리
+matplotlib>=3.7.0         # 결과 시각화
+PyYAML>=6.0               # yaml 처리
+
+# 라즈베리파이 전용 (step8) - 라즈베리파이에서만 설치
+# pip install RPi.GPIO
