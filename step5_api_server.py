@@ -121,7 +121,7 @@ class StatsResponse(BaseModel):
 
 
 # ════════════════════════════════════════════════
-# 서버 통계 (피드백 루프용 데이터 수집)
+# 서버 통계 + 웹캠 제어 상태
 # ════════════════════════════════════════════════
 stats = {
     "total":       0,
@@ -129,6 +129,19 @@ stats = {
     "confidences": [],
     "latencies":   [],
     "start_time":  datetime.now(),
+}
+
+# 최신 감지 결과 (아두이노 LED 제어용)
+latest_detection = {
+    "classes":   [],
+    "timestamp": "",
+}
+
+# 웹캠 제어 상태
+webcam_state = {
+    "paused":           False,
+    "capture_total":    0,    # 버튼1 누른 총 횟수 (누적, 절대 줄지 않음)
+    "capture_done":     0,    # step3가 처리 완료한 횟수
 }
 
 
@@ -190,10 +203,14 @@ async def predict(file: UploadFile = File(..., description="분류할 이미지 
     stats["confidences"].append(top1_conf)
     stats["latencies"].append(elapsed)
 
-    # 수신 이미지 저장 (재학습 데이터 수집)
+    # 최신 감지 결과 업데이트 (아두이노 LED 제어용)
+    latest_detection["classes"]   = [class_name]
+    latest_detection["timestamp"] = timestamp
+
+    # 수신 이미지 저장 (collected_data 폴더에 저장)
     if SAVE_IMAGES:
         save_dir = Path(SAVE_IMAGE_DIR) / class_name
-        save_dir.mkdir(exist_ok=True)
+        save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / f"{timestamp.replace(':', '-')}_{stats['total']:06d}.jpg"
         img_pil.save(save_path)
 
@@ -230,6 +247,76 @@ async def get_stats():
         avg_confidence = round(avg_conf, 4),
         avg_latency_ms = round(avg_latency, 2),
     )
+
+
+# ── 웹캠 제어 엔드포인트 ─────────────────────────────
+
+@app.post("/webcam/pause", summary="웹캠 분류 일시정지")
+async def webcam_pause():
+    webcam_state["paused"] = True
+    logger.info("웹캠 일시정지")
+    return {"paused": True}
+
+@app.post("/webcam/resume", summary="웹캠 분류 재개")
+async def webcam_resume():
+    webcam_state["paused"] = False
+    logger.info("웹캠 재개")
+    return {"paused": False}
+
+@app.post("/webcam/capture", summary="웹캠 캡처 저장 요청")
+async def webcam_capture():
+    webcam_state["capture_total"] += 1
+    pending = webcam_state["capture_total"] - webcam_state["capture_done"]
+    logger.info(f"캡처 요청 (총: {webcam_state['capture_total']}, 대기: {pending})")
+    return {
+        "capture_total": webcam_state["capture_total"],
+        "capture_done":  webcam_state["capture_done"],
+        "pending":       pending,
+    }
+
+@app.post("/webcam/capture_done", summary="캡처 완료 처리")
+async def webcam_capture_done():
+    webcam_state["capture_done"] += 1
+    return {
+        "capture_total": webcam_state["capture_total"],
+        "capture_done":  webcam_state["capture_done"],
+    }
+
+@app.get("/webcam/state", summary="웹캠 제어 상태 조회")
+async def webcam_get_state():
+    return {
+        "paused":        webcam_state["paused"],
+        "capture_total": webcam_state["capture_total"],
+        "capture_done":  webcam_state["capture_done"],
+        "pending":       webcam_state["capture_total"] - webcam_state["capture_done"],
+    }
+
+@app.get("/latest", summary="최신 감지 결과 (아두이노용)")
+async def get_latest():
+    """아두이노 step8이 폴링하는 엔드포인트. 최신 감지 클래스 목록 반환."""
+    return latest_detection
+
+@app.post("/detect_multi", summary="다중 감지 결과 등록")
+async def detect_multi(data: dict):
+    """step3(웹캠)이 다중 감지 결과를 등록. 아두이노가 즉시 수신 가능."""
+    classes = data.get("classes", [])
+    latest_detection["classes"]   = classes
+    latest_detection["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 감지된 이미지 저장 (캡처 저장 요청 있을 때)
+    if webcam_state["capture_queue"] > 0:
+        webcam_state["capture_queue"] -= 1
+        img_data = data.get("image")
+        if img_data:
+            ts       = latest_detection["timestamp"].replace(":", "-")
+            save_dir = Path(SAVE_IMAGE_DIR) / "captures"
+            save_dir.mkdir(parents=True, exist_ok=True)
+            import base64
+            with open(save_dir / f"cap_{ts}.jpg", "wb") as f:
+                f.write(base64.b64decode(img_data))
+            logger.info(f"캡처 저장: cap_{ts}.jpg")
+
+    return {"ok": True, "classes": classes}
 
 
 @app.get("/collected", summary="수집된 재학습 데이터 현황")
