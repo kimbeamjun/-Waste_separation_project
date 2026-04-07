@@ -1,24 +1,24 @@
 """
-[8단계 - 아두이노 버전] Serial 통신으로 LED 제어
-AI 서버 분류 결과 → Serial → 아두이노 → LED 점등
+[8단계] 아두이노 Serial 통신 + 버튼 제어 연동
+AI 서버 분류 결과 → 아두이노 LED/매트릭스
+아두이노 버튼 입력 → 웹캠 캡처/일시정지 제어
+
+버튼 동작:
+  버튼1 (D8) 누르기 → 웹캠 현재 화면 캡처 저장
+  버튼2 (D9) 누르기 → 분류 일시정지 / 재개 토글
 
 실행 환경: PyCharm 로컬 (Windows 10)
 실행 방법: python step8_arduino.py
 설치 필요: pip install pyserial
-
-사전 조건:
-  1. 아두이노에 arduino_led_control.ino 업로드 완료
-  2. step5_api_server.py 실행 중
-  3. USB로 아두이노 연결
-
-연결 구조:
-  웹캠 클라이언트 → FastAPI 서버 → 이 파일 → Serial → 아두이노 → LED
+사전 조건: step5_api_server.py + step3_webcam.py 실행 중
 """
 
 import time
+import threading
 import requests
 import serial
 import serial.tools.list_ports
+from datetime import datetime
 
 # ════════════════════════════════════════════════
 # 설정
@@ -27,17 +27,22 @@ SERVER_URL     = "http://localhost:8000"
 STATS_URL      = f"{SERVER_URL}/stats"
 HEALTH_URL     = f"{SERVER_URL}/health"
 
-BAUD_RATE      = 9600
-POLL_INTERVAL  = 1.0    # AI 서버 폴링 간격 (초)
-CONF_THRESHOLD = 0.65   # 신뢰도 임계값 (이하면 LED OFF)
+# 웹캠 제어 API (step5 서버에 추가된 엔드포인트)
+PAUSE_URL      = f"{SERVER_URL}/webcam/pause"
+RESUME_URL     = f"{SERVER_URL}/webcam/resume"
+CAPTURE_URL    = f"{SERVER_URL}/webcam/capture"
 
-# 클래스 → 아두이노 명령 코드
+BAUD_RATE      = 9600
+POLL_INTERVAL  = 0.8    # AI 서버 폴링 간격 (초)
+CONF_THRESHOLD = 0.65
+
+# 클래스 → 아두이노 코드
 CLASS_CMD = {
-    "can":          "0",   # 빨간 LED
-    "paper":        "1",   # 초록 LED
-    "pet_bottle":   "2",   # 파란 LED
-    "snack_bag":    "3",   # 노란 LED
-    "glass_bottle": "4",   # 흰색 LED
+    "can":          "0",
+    "paper":        "1",
+    "pet_bottle":   "2",
+    "snack_bag":    "3",
+    "glass_bottle": "4",
 }
 
 CLASS_KOR = {
@@ -56,122 +61,239 @@ LED_COLOR = {
     "glass_bottle": "⚪ 흰색",
 }
 
+# ════════════════════════════════════════════════
+# 전역 상태
+# ════════════════════════════════════════════════
+is_paused    = False
+capture_idx  = 0
+ser          = None   # Serial 객체 (스레드 공유)
+
 
 # ════════════════════════════════════════════════
-# 아두이노 포트 자동 탐색
+# 아두이노 포트 탐색
 # ════════════════════════════════════════════════
 def find_arduino_port():
-    """연결된 아두이노 포트 자동 탐색"""
     ports = serial.tools.list_ports.comports()
     for port in ports:
         desc = port.description.lower()
         if "arduino" in desc or "ch340" in desc or "usb serial" in desc:
             return port.device
-    # 자동 탐색 실패 시 사용 가능한 포트 출력
     if ports:
-        print("  사용 가능한 포트 목록:")
+        print("  사용 가능한 포트:")
         for p in ports:
             print(f"    {p.device} - {p.description}")
-        return ports[0].device   # 첫 번째 포트 사용
+        return ports[0].device
     return None
+
+
+# ════════════════════════════════════════════════
+# 웹캠 제어 (step5 서버에 요청)
+# ════════════════════════════════════════════════
+def webcam_capture():
+    """웹캠 캡처 저장 요청"""
+    global capture_idx
+    capture_idx += 1
+    try:
+        # step5 서버에 캡처 요청
+        requests.post(CAPTURE_URL, timeout=2)
+        ts = datetime.now().strftime("%H:%M:%S")
+        print(f"  📸 [{ts}] 캡처 저장 요청 (#{capture_idx})")
+    except Exception:
+        # 서버 엔드포인트 없으면 로컬 저장
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        print(f"  📸 [{ts}] 캡처 요청 전송 (#{capture_idx})")
+
+
+def webcam_pause():
+    """웹캠 분류 일시정지 요청"""
+    try:
+        requests.post(PAUSE_URL, timeout=2)
+    except Exception:
+        pass
+    print("  ⏸  분류 일시정지")
+
+
+def webcam_resume():
+    """웹캠 분류 재개 요청"""
+    try:
+        requests.post(RESUME_URL, timeout=2)
+    except Exception:
+        pass
+    print("  ▶  분류 재개")
+
+
+# ════════════════════════════════════════════════
+# 아두이노 → PC 버튼 수신 스레드
+# ════════════════════════════════════════════════
+def button_listener():
+    """아두이노에서 오는 버튼 명령을 별도 스레드로 수신"""
+    global is_paused, ser
+
+    while True:
+        try:
+            if ser and ser.in_waiting > 0:
+                line = ser.readline().decode("utf-8", errors="ignore").strip()
+
+                if line == "BTN:CAPTURE":
+                    webcam_capture()
+
+                elif line == "BTN:PAUSE":
+                    is_paused = True
+                    webcam_pause()
+
+                elif line == "BTN:RESUME":
+                    is_paused = False
+                    webcam_resume()
+
+                elif line and not line.startswith("LED:"):
+                    print(f"  [아두이노] {line}")
+
+        except Exception:
+            pass
+
+        time.sleep(0.02)   # 20ms 폴링
+
+
+# ════════════════════════════════════════════════
+# 다중 감지 명령 전송
+# ════════════════════════════════════════════════
+def send_multi(detected_classes: list):
+    """
+    감지된 클래스 목록을 아두이노로 전송
+    단일: "0\n"
+    다중: "M012\n"
+    """
+    if not detected_classes:
+        ser.write(b"X\n")
+        return
+
+    codes = "".join(CLASS_CMD[c] for c in detected_classes if c in CLASS_CMD)
+    if not codes:
+        return
+
+    if len(codes) == 1:
+        ser.write(f"{codes}\n".encode())
+    else:
+        ser.write(f"M{codes}\n".encode())
 
 
 # ════════════════════════════════════════════════
 # 메인
 # ════════════════════════════════════════════════
 def run():
-    print("=" * 50)
-    print("  폐기물 분류 AI - 아두이노 LED 제어")
-    print("=" * 50)
+    global ser, is_paused
 
-    # ── AI 서버 연결 확인 ────────────────────────
-    print("\n[1] AI 서버 연결 확인 중...")
+    print("=" * 55)
+    print("  폐기물 분류 AI - 아두이노 버튼 제어")
+    print("=" * 55)
+    print("  버튼1 (D8): 캡처 저장")
+    print("  버튼2 (D9): 일시정지 / 재개 토글")
+    print()
+
+    # ── AI 서버 확인 ─────────────────────────────
+    print("[1] AI 서버 연결 확인...")
     try:
         res = requests.get(HEALTH_URL, timeout=3).json()
         if res.get("model_ready"):
-            print(f"  ✅ AI 서버 연결 성공: {SERVER_URL}")
+            print(f"  ✅ AI 서버 연결: {SERVER_URL}")
         else:
             print("  ⚠️  모델 미로드 — step5_api_server.py 먼저 실행하세요.")
             return
     except Exception:
         print(f"  ❌ AI 서버 연결 실패: {SERVER_URL}")
-        print("  step5_api_server.py 를 먼저 실행하세요.")
         return
 
-    # ── 아두이노 Serial 연결 ──────────────────────
-    print("\n[2] 아두이노 포트 탐색 중...")
+    # ── 아두이노 연결 ─────────────────────────────
+    print("\n[2] 아두이노 포트 탐색...")
     port = find_arduino_port()
-    if port is None:
+    if not port:
         print("  ❌ 아두이노를 찾을 수 없습니다.")
-        print("  USB 연결 확인 후 다시 실행하세요.")
         return
 
     print(f"  ✅ 아두이노 감지: {port}")
 
     try:
         ser = serial.Serial(port, BAUD_RATE, timeout=2)
-        time.sleep(2)   # 아두이노 리셋 대기
-        # ARDUINO_READY 수신 확인
-        ready_msg = ser.readline().decode("utf-8", errors="ignore").strip()
-        if "READY" in ready_msg:
-            print(f"  ✅ 아두이노 준비 완료 ({ready_msg})")
+        time.sleep(2)
+        ready = ser.readline().decode("utf-8", errors="ignore").strip()
+        if "READY" in ready:
+            print(f"  ✅ 아두이노 준비 완료")
         else:
-            print(f"  ⚠️  아두이노 응답: {ready_msg}")
+            print(f"  ⚠️  응답: {ready}")
     except Exception as e:
         print(f"  ❌ Serial 연결 실패: {e}")
         return
 
-    # ── 테스트 점등 ───────────────────────────────
-    print("\n[3] LED 테스트 (전체 순서대로 점등)...")
-    ser.write(b"T")
-    time.sleep(3)
-    print("  ✅ 테스트 완료\n")
+    # ── 버튼 수신 스레드 시작 ─────────────────────
+    t = threading.Thread(target=button_listener, daemon=True)
+    t.start()
+    print("\n  ✅ 버튼 수신 스레드 시작")
+
+    # ── 테스트 ───────────────────────────────────
+    print("\n[3] LED + 도트매트릭스 테스트...")
+    ser.write(b"T\n")
+    time.sleep(4)
 
     # ── 메인 루프 ─────────────────────────────────
-    print("=" * 50)
-    print("  AI 분류 시작! (Ctrl+C 로 종료)")
-    print("=" * 50)
+    print("\n" + "=" * 55)
+    print("  AI 분류 시작! (Ctrl+C로 종료)")
+    print("=" * 55)
 
-    last_cls   = None
-    last_total = 0
-    error_cnt  = 0
+    last_classes = []
+    last_total   = 0
+    error_cnt    = 0
 
     while True:
         try:
+            # 일시정지 중이면 폴링 스킵
+            if is_paused:
+                time.sleep(POLL_INTERVAL)
+                continue
+
             res    = requests.get(STATS_URL, timeout=3).json()
             total  = res.get("total_requests", 0)
             conf   = res.get("avg_confidence", 0.0)
             counts = res.get("class_counts", {})
 
-            # 새 예측이 들어왔을 때만 처리
             if total > last_total and counts:
                 last_total = total
 
-                # 가장 최근에 많이 예측된 클래스
-                top_cls = max(counts, key=counts.get)
-
+                # 신뢰도 충족하는 클래스만 선별
                 if conf >= CONF_THRESHOLD:
-                    cmd = CLASS_CMD.get(top_cls, "X")
+                    # 예측 횟수 기준 상위 클래스 추출
+                    detected = [
+                        cls for cls, cnt in counts.items()
+                        if cnt > 0
+                    ]
+                    detected = sorted(
+                        detected, key=lambda c: counts[c], reverse=True
+                    )[:3]   # 최대 3개까지
 
-                    if top_cls != last_cls:
-                        # 아두이노로 명령 전송
-                        ser.write(cmd.encode())
+                    if detected != last_classes:
+                        # 아두이노 전송
+                        send_multi(detected)
+
+                        # 콘솔 출력
+                        ts       = datetime.now().strftime("%H:%M:%S")
+                        kor_list = [CLASS_KOR.get(c, c) for c in detected]
+                        clr_list = [LED_COLOR.get(c, "💡") for c in detected]
+                        print(f"\n  [{ts}] 🗑️  감지: {' + '.join(kor_list)}")
+                        print(f"         LED: {' + '.join(clr_list)}")
+                        print(f"         신뢰도: {conf:.0%}")
+
+                        # 응답 수신
                         time.sleep(0.1)
+                        if ser.in_waiting > 0:
+                            resp = ser.readline().decode("utf-8", errors="ignore").strip()
+                            print(f"         아두이노: {resp}")
 
-                        # 아두이노 응답 수신
-                        response = ser.readline().decode("utf-8", errors="ignore").strip()
-
-                        kor   = CLASS_KOR.get(top_cls, top_cls)
-                        color = LED_COLOR.get(top_cls, "💡")
-                        print(f"  🗑️  {kor}  |  {color} LED 점등  |  신뢰도: {conf:.0%}  |  응답: {response}")
-                        last_cls = top_cls
-
+                        last_classes = detected
                 else:
-                    # 신뢰도 낮으면 LED 끄기
-                    if last_cls is not None:
-                        ser.write(b"X")
-                        print(f"  ⚠️  신뢰도 낮음 ({conf:.0%}) → LED 전체 OFF")
-                        last_cls = None
+                    # 신뢰도 낮으면 OFF
+                    if last_classes:
+                        ser.write(b"X\n")
+                        print(f"  ⚠️  신뢰도 낮음 ({conf:.0%}) → LED OFF")
+                        last_classes = []
 
             error_cnt = 0
             time.sleep(POLL_INTERVAL)
@@ -179,7 +301,7 @@ def run():
         except requests.exceptions.ConnectionError:
             error_cnt += 1
             print(f"  ⚠️  서버 연결 끊김 (재시도 {error_cnt}회)")
-            ser.write(b"X")   # 연결 끊기면 LED 끄기
+            ser.write(b"X\n")
             time.sleep(3)
 
         except KeyboardInterrupt:
@@ -191,7 +313,8 @@ def run():
             time.sleep(2)
 
     # 종료 처리
-    ser.write(b"X")    # 전체 LED 끄기
+    ser.write(b"X\n")
+    time.sleep(0.2)
     ser.close()
     print("Serial 연결 종료.")
 

@@ -157,7 +157,7 @@ def draw_summary(frame, detected_classes):
     cv2.addWeighted(overlay, 0.78, frame, 0.22, 0, frame)
     cv2.rectangle(frame, (x0,y0), (x0+panel_w, y0+panel_h), (70,70,70), 1)
 
-    total = sum(v[1] for v in items)
+    total = sum(v[1][1] for v in items)
     frame = put_kor(frame, f"감지된 폐기물  {total}개",
                     (x0+10, y0+6), size=20, color=(160,160,160))
 
