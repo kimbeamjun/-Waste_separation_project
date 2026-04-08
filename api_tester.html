@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>폐기물 분류 AI — API 테스터</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+KR:wght@300;400;600&display=swap');
+
+  :root {
+    --bg: #0b0f14;
+    --bg2: #111720;
+    --bg3: #181f2a;
+    --border: #1e2d3d;
+    --green: #00e676;
+    --green2: #00c853;
+    --blue: #40c4ff;
+    --amber: #ffab40;
+    --red: #ff5252;
+    --text: #cdd9e5;
+    --muted: #4a5568;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Noto Sans KR', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── header ── */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--green), var(--blue));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .header-title { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+  .header-sub { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+
+  #server-status {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 12px;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); transition: background .3s;
+  }
+  .dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .dot.err { background: var(--red); }
+
+  /* ── layout ── */
+  .container {
+    display: grid;
+    grid-template-columns: 260px 1fr 340px;
+    height: calc(100vh - 61px);
+    overflow: hidden;
+  }
+
+  /* ── sidebar ── */
+  .sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px 0;
+  }
+  .sidebar-section { padding: 6px 16px 2px; color: var(--muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; font-family: var(--font-mono); }
+  .endpoint-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 16px; cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: all .15s;
+  }
+  .endpoint-item:hover { background: var(--bg3); }
+  .endpoint-item.active { background: var(--bg3); border-left-color: var(--green); }
+  .badge {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    padding: 2px 6px; border-radius: 4px; min-width: 40px; text-align: center;
+  }
+  .badge.GET  { background: #1a3a5c; color: var(--blue); }
+  .badge.POST { background: #1a3d27; color: var(--green); }
+  .ep-path { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+  .ep-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ── main ── */
+  .main { overflow-y: auto; padding: 28px 32px; }
+
+  .panel-title {
+    font-size: 18px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.4px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel-desc { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+
+  .url-bar {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: var(--font-mono); font-size: 13px;
+    color: var(--text);
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 20px;
+  }
+  .url-method { font-weight: 600; }
+  .url-method.GET  { color: var(--blue); }
+  .url-method.POST { color: var(--green); }
+
+  .section-label {
+    font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--muted); font-family: var(--font-mono);
+    margin-bottom: 8px; margin-top: 20px;
+  }
+
+  .field-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+  label { font-size: 12px; color: var(--muted); }
+  input[type=text], input[type=number] {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 12px;
+    color: var(--text);
+    font-family: var(--font-mono); font-size: 12px;
+    outline: none; width: 100%;
+    transition: border .15s;
+  }
+  input:focus { border-color: var(--green); }
+
+  .file-drop {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    position: relative;
+  }
+  .file-drop:hover, .file-drop.drag { border-color: var(--green); background: #0d1f14; }
+  .file-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .file-drop .icon { font-size: 28px; margin-bottom: 8px; }
+  .file-drop .hint { color: var(--muted); font-size: 12px; }
+  #preview-img { max-width: 100%; max-height: 160px; border-radius: 8px; margin-top: 10px; display: none; }
+
+  .run-btn {
+    background: var(--green2);
+    color: #001a0a;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 28px;
+    font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    margin-top: 8px;
+    letter-spacing: 0.3px;
+  }
+  .run-btn:hover { background: var(--green); transform: translateY(-1px); }
+  .run-btn:active { transform: none; }
+  .run-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* ── response panel ── */
+  .response-panel {
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .resp-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: var(--font-mono); font-size: 12px;
+  }
+  #resp-status { font-weight: 600; }
+  #resp-status.ok  { color: var(--green); }
+  #resp-status.err { color: var(--red); }
+  #resp-time { color: var(--muted); }
+  #resp-body {
+    flex: 1; overflow-y: auto;
+    padding: 16px 20px;
+    font-family: var(--font-mono); font-size: 12px;
+    line-height: 1.8; white-space: pre-wrap; word-break: break-all;
+  }
+  .resp-empty { color: var(--muted); text-align: center; padding-top: 60px; }
+
+  /* JSON syntax */
+  .json-key   { color: var(--blue); }
+  .json-str   { color: var(--amber); }
+  .json-num   { color: #b5e8b0; }
+  .json-bool  { color: #c792ea; }
+  .json-null  { color: var(--red); }
+
+  /* ── confidence meter ── */
+  .conf-meter { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px; }
+  .conf-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .conf-bar-track { background: var(--bg3); border-radius: 6px; height: 8px; overflow: hidden; }
+  .conf-bar-fill { height: 100%; border-radius: 6px; transition: width .5s ease; background: var(--green); }
+  .conf-class { font-size: 22px; font-weight: 600; margin-top: 12px; color: var(--green); }
+  .conf-kor   { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .conf-ms    { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── stats bars ── */
+  .stats-card { background: var(--bg3); border-radius: 8px; padding: 14px; margin-bottom: 8px; }
+  .stats-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; }
+  .stats-num { font-family: var(--font-mono); color: var(--green); font-weight: 600; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">🗑️</div>
+    <div>
+      <div class="header-title">폐기물 분류 AI — API 테스터</div>
+      <div class="header-sub">localhost:8000</div>
+    </div>
+  </div>
+  <div id="server-status">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">확인 중...</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ── SIDEBAR ── -->
+  <div class="sidebar">
+    <div class="sidebar-section">서버 상태</div>
+    <div class="endpoint-item active" onclick="selectEp('root')">
+      <span class="badge GET">GET</span>
+      <div><div class="ep-path">/</div><div class="ep-desc">서버 상태 확인</div></div>
+    </div>
+    <div class="endpoint-item" onclick="selectEp('health')">
+      <span class="badge GET">GET</span>
+      <div><div class="ep-path">/health</div><div class="ep-desc">헬스체크</div></div>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:8px">추론</div>
+    <div class="endpoint-item" onclick="selectEp('predict')">
+      <span class="badge POST">POST</span>
+      <div><div class="ep-path">/predict</div><div class="ep-desc">폐기물 분류 예측</div></div>
+    </div>
+    <div class="endpoint-item" onclick="selectEp('detect_multi')">
+      <span class="badge POST">POST</span>
+      <div><div class="ep-path">/detect_multi</div><div class="ep-desc">다중 감지 결과 등록</div></div>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:8px">웹캠 제어</div>
+    <div class="endpoint-item" onclick="selectEp('webcam_pause')">
+      <span class="badge POST">POST</span>
+      <div><div class="ep-path">/webcam/pause</div><div class="ep-desc">분류 일시정지</div></div>
+    </div>
+    <div class="endpoint-item" onclick="selectEp('webcam_resume')">
+      <span class="badge POST">POST</span>
+      <div><div class="ep-path">/webcam/resume</div><div class="ep-desc">분류 재개</div></div>
+    </div>
+    <div class="endpoint-item" onclick="selectEp('webcam_capture')">
+      <span class="badge POST">POST</span>
+      <div><div class="ep-path">/webcam/capture</div><div class="ep-desc">캡처 저장 요청</div></div>
+    </div>
+    <div class="endpoint-item" onclick="selectEp('webcam_capture_done')">
+      <span class="badge POST">POST</span>
+      <div><div class="ep-path">/webcam/capture_done</div><div class="ep-desc">캡처 완료 처리</div></div>
+    </div>
+    <div class="endpoint-item" onclick="selectEp('webcam_state')">
+      <span class="badge GET">GET</span>
+      <div><div class="ep-path">/webcam/state</div><div class="ep-desc">웹캠 제어 상태</div></div>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:8px">모니터링</div>
+    <div class="endpoint-item" onclick="selectEp('stats')">
+      <span class="badge GET">GET</span>
+      <div><div class="ep-path">/stats</div><div class="ep-desc">서버 통계 (피드백 루프)</div></div>
+    </div>
+    <div class="endpoint-item" onclick="selectEp('latest')">
+      <span class="badge GET">GET</span>
+      <div><div class="ep-path">/latest</div><div class="ep-desc">최신 감지 결과</div></div>
+    </div>
+    <div class="endpoint-item" onclick="selectEp('collected')">
+      <span class="badge GET">GET</span>
+      <div><div class="ep-path">/collected</div><div class="ep-desc">수집 데이터 현황</div></div>
+    </div>
+
+    <div style="padding: 20px 16px 8px;">
+      <button onclick="runAll()" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">
+        ▶ 전체 GET 일괄 테스트
+      </button>
+    </div>
+  </div>
+
+  <!-- ── MAIN ── -->
+  <div class="main" id="main-panel">
+
+    <!-- ROOT -->
+    <div id="ep-root">
+      <div class="panel-title"><span class="badge GET" style="font-size:12px">GET</span> /</div>
+      <div class="panel-desc">서버가 정상 실행 중인지 확인합니다.</div>
+      <div class="url-bar"><span class="url-method GET">GET</span> http://localhost:8000/</div>
+      <button class="run-btn" onclick="callGet('/')">실행</button>
+    </div>
+
+    <!-- HEALTH -->
+    <div id="ep-health" style="display:none">
+      <div class="panel-title"><span class="badge GET" style="font-size:12px">GET</span> /health</div>
+      <div class="panel-desc">모델 로드 여부, 서버 업타임을 반환합니다.</div>
+      <div class="url-bar"><span class="url-method GET">GET</span> http://localhost:8000/health</div>
+      <button class="run-btn" onclick="callGet('/health')">실행</button>
+    </div>
+
+    <!-- PREDICT -->
+    <div id="ep-predict" style="display:none">
+      <div class="panel-title"><span class="badge POST" style="font-size:12px">POST</span> /predict</div>
+      <div class="panel-desc">이미지를 업로드하여 폐기물 종류를 분류합니다. 신뢰도 0.5 이상 시 결과 반환.</div>
+      <div class="url-bar"><span class="url-method POST">POST</span> http://localhost:8000/predict</div>
+      <div class="section-label">이미지 선택</div>
+      <div class="file-drop" id="drop-zone" ondragover="onDrag(event,true)" ondragleave="onDrag(event,false)" ondrop="onDrop(event)">
+        <input type="file" accept="image/*" id="img-input" onchange="onFileChange(this)">
+        <div class="icon">📷</div>
+        <div>이미지를 드래그하거나 클릭해서 선택</div>
+        <div class="hint">JPG, PNG — 웹캠 캡처 이미지 권장</div>
+        <img id="preview-img" alt="preview">
+      </div>
+      <button class="run-btn" id="predict-btn" onclick="callPredict()">예측 실행</button>
+    </div>
+
+    <!-- DETECT_MULTI -->
+    <div id="ep-detect_multi" style="display:none">
+      <div class="panel-title"><span class="badge POST" style="font-size:12px">POST</span> /detect_multi</div>
+      <div class="panel-desc">다중 감지 결과를 서버에 등록합니다. 아두이노 LED 제어 시 /latest로 조회됩니다.</div>
+      <div class="url-bar"><span class="url-method POST">POST</span> http://localhost:8000/detect_multi</div>
+      <div class="section-label">Body (JSON)</div>
+      <div class="field-group">
+        <label>classes (콤마 구분, 예: can,paper)</label>
+        <input type="text" id="multi-classes" value="can,paper" placeholder="can,paper,pet_bottle">
+      </div>
+      <button class="run-btn" onclick="callDetectMulti()">실행</button>
+    </div>
+
+    <!-- WEBCAM PAUSE -->
+    <div id="ep-webcam_pause" style="display:none">
+      <div class="panel-title"><span class="badge POST" style="font-size:12px">POST</span> /webcam/pause</div>
+      <div class="panel-desc">step3_webcam.py 의 분류 루프를 일시정지합니다. 아두이노 버튼2와 동일 동작.</div>
+      <div class="url-bar"><span class="url-method POST">POST</span> http://localhost:8000/webcam/pause</div>
+      <button class="run-btn" onclick="callPost('/webcam/pause')">일시정지</button>
+    </div>
+
+    <!-- WEBCAM RESUME -->
+    <div id="ep-webcam_resume" style="display:none">
+      <div class="panel-title"><span class="badge POST" style="font-size:12px">POST</span> /webcam/resume</div>
+      <div class="panel-desc">일시정지된 웹캠 분류를 재개합니다.</div>
+      <div class="url-bar"><span class="url-method POST">POST</span> http://localhost:8000/webcam/resume</div>
+      <button class="run-btn" onclick="callPost('/webcam/resume')">재개</button>
+    </div>
+
+    <!-- WEBCAM CAPTURE -->
+    <div id="ep-webcam_capture" style="display:none">
+      <div class="panel-title"><span class="badge POST" style="font-size:12px">POST</span> /webcam/capture</div>
+      <div class="panel-desc">아두이노 버튼1 누름과 동일. 현재 프레임을 collected_data/captures/ 에 저장 요청.</div>
+      <div class="url-bar"><span class="url-method POST">POST</span> http://localhost:8000/webcam/capture</div>
+      <button class="run-btn" onclick="callPost('/webcam/capture')">캡처 저장</button>
+    </div>
+
+    <!-- WEBCAM CAPTURE DONE -->
+    <div id="ep-webcam_capture_done" style="display:none">
+      <div class="panel-title"><span class="badge POST" style="font-size:12px">POST</span> /webcam/capture_done</div>
+      <div class="panel-desc">step3가 캡처를 완료했음을 서버에 알립니다. capture_done 카운트 증가.</div>
+      <div class="url-bar"><span class="url-method POST">POST</span> http://localhost:8000/webcam/capture_done</div>
+      <button class="run-btn" onclick="callPost('/webcam/capture_done')">완료 처리</button>
+    </div>
+
+    <!-- WEBCAM STATE -->
+    <div id="ep-webcam_state" style="display:none">
+      <div class="panel-title"><span class="badge GET" style="font-size:12px">GET</span> /webcam/state</div>
+      <div class="panel-desc">paused 여부, capture_total/done 카운트 등 현재 웹캠 제어 상태를 반환합니다.</div>
+      <div class="url-bar"><span class="url-method GET">GET</span> http://localhost:8000/webcam/state</div>
+      <button class="run-btn" onclick="callGet('/webcam/state')">실행</button>
+    </div>
+
+    <!-- STATS -->
+    <div id="ep-stats" style="display:none">
+      <div class="panel-title"><span class="badge GET" style="font-size:12px">GET</span> /stats</div>
+      <div class="panel-desc">총 요청 수, 클래스별 카운트, 평균 신뢰도, 평균 레이턴시를 반환합니다. 피드백 루프 기준 지표.</div>
+      <div class="url-bar"><span class="url-method GET">GET</span> http://localhost:8000/stats</div>
+      <button class="run-btn" onclick="callGet('/stats')">실행</button>
+    </div>
+
+    <!-- LATEST -->
+    <div id="ep-latest" style="display:none">
+      <div class="panel-title"><span class="badge GET" style="font-size:12px">GET</span> /latest</div>
+      <div class="panel-desc">아두이노 step8이 0.5초마다 폴링하는 엔드포인트. 최신 다중 감지 classes 배열 반환.</div>
+      <div class="url-bar"><span class="url-method GET">GET</span> http://localhost:8000/latest</div>
+      <button class="run-btn" onclick="callGet('/latest')">실행</button>
+    </div>
+
+    <!-- COLLECTED -->
+    <div id="ep-collected" style="display:none">
+      <div class="panel-title"><span class="badge GET" style="font-size:12px">GET</span> /collected</div>
+      <div class="panel-desc">재학습용 수집 이미지 현황. 클래스당 100장(총 500장) 달성 시 retrain_ready: true.</div>
+      <div class="url-bar"><span class="url-method GET">GET</span> http://localhost:8000/collected</div>
+      <button class="run-btn" onclick="callGet('/collected')">실행</button>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- ── RESPONSE PANEL ── -->
+  <div class="response-panel">
+    <div class="resp-header">
+      <span id="resp-status">응답 대기</span>
+      <span id="resp-time"></span>
+    </div>
+    <div id="resp-body" class="resp-empty">← 왼쪽에서 엔드포인트를 선택하고 실행하세요.</div>
+    <div id="predict-result" style="display:none; padding: 16px 20px; border-top: 1px solid var(--border);">
+      <div class="conf-meter">
+        <div class="conf-label">신뢰도</div>
+        <div class="conf-bar-track"><div class="conf-bar-fill" id="conf-fill" style="width:0%"></div></div>
+        <div class="conf-class" id="conf-class">—</div>
+        <div class="conf-kor"  id="conf-kor">—</div>
+        <div class="conf-ms"   id="conf-ms">—</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+const BASE = 'http://localhost:8000';
+let currentEp = 'root';
+
+/* ── 사이드바 선택 ── */
+function selectEp(id) {
+  document.querySelectorAll('.endpoint-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.querySelectorAll('[id^="ep-"]').forEach(el => el.style.display = 'none');
+  document.getElementById('ep-' + id).style.display = 'block';
+  currentEp = id;
+  clearResp();
+}
+
+function clearResp() {
+  document.getElementById('resp-status').textContent = '응답 대기';
+  document.getElementById('resp-status').className = '';
+  document.getElementById('resp-time').textContent = '';
+  document.getElementById('resp-body').textContent = '← 엔드포인트를 선택하고 실행하세요.';
+  document.getElementById('resp-body').className = 'resp-empty';
+  document.getElementById('predict-result').style.display = 'none';
+}
+
+/* ── 서버 상태 확인 ── */
+async function checkServer() {
+  try {
+    const res = await fetch(BASE + '/health', { signal: AbortSignal.timeout(2000) });
+    const ok = res.ok;
+    document.getElementById('status-dot').className = 'dot ' + (ok ? 'ok' : 'err');
+    document.getElementById('status-text').textContent = ok ? '서버 연결됨' : '오류';
+  } catch {
+    document.getElementById('status-dot').className = 'dot err';
+    document.getElementById('status-text').textContent = '연결 실패 — step5 실행 필요';
+  }
+}
+checkServer();
+setInterval(checkServer, 5000);
+
+/* ── 응답 표시 ── */
+function showResp(data, ms, ok) {
+  const el = document.getElementById('resp-status');
+  el.textContent = ok ? '200 OK' : '오류';
+  el.className = ok ? 'ok' : 'err';
+  document.getElementById('resp-time').textContent = ms + 'ms';
+  const body = document.getElementById('resp-body');
+  body.className = '';
+  body.innerHTML = syntaxHighlight(JSON.stringify(data, null, 2));
+}
+
+function showErr(msg) {
+  document.getElementById('resp-status').textContent = '연결 실패';
+  document.getElementById('resp-status').className = 'err';
+  document.getElementById('resp-time').textContent = '';
+  const body = document.getElementById('resp-body');
+  body.className = '';
+  body.textContent = msg;
+}
+
+/* ── JSON 컬러링 ── */
+function syntaxHighlight(json) {
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+\.?\d*([eE][+-]?\d+)?)/g, (m) => {
+    let cls = 'json-num';
+    if (/^"/.test(m)) cls = /:$/.test(m) ? 'json-key' : 'json-str';
+    else if (/true|false/.test(m)) cls = 'json-bool';
+    else if (/null/.test(m)) cls = 'json-null';
+    return `<span class="${cls}">${m}</span>`;
+  });
+}
+
+/* ── GET ── */
+async function callGet(path) {
+  const t0 = Date.now();
+  try {
+    const res = await fetch(BASE + path);
+    const ms = Date.now() - t0;
+    const data = await res.json();
+    showResp(data, ms, res.ok);
+
+    // predict result meter
+    if (path === '/predict' || (data.confidence !== undefined)) {
+      showPredictResult(data);
+    }
+  } catch(e) {
+    showErr('서버에 연결할 수 없습니다.\nstep5_api_server.py 가 실행 중인지 확인하세요.\n\n' + e.message);
+  }
+}
+
+/* ── POST (no body) ── */
+async function callPost(path) {
+  const t0 = Date.now();
+  try {
+    const res = await fetch(BASE + path, { method: 'POST' });
+    const ms = Date.now() - t0;
+    const data = await res.json();
+    showResp(data, ms, res.ok);
+  } catch(e) {
+    showErr('오류: ' + e.message);
+  }
+}
+
+/* ── PREDICT (multipart) ── */
+async function callPredict() {
+  const file = document.getElementById('img-input').files[0];
+  if (!file) { alert('이미지를 먼저 선택해주세요.'); return; }
+  const btn = document.getElementById('predict-btn');
+  btn.disabled = true; btn.textContent = '추론 중...';
+  const fd = new FormData();
+  fd.append('file', file);
+  const t0 = Date.now();
+  try {
+    const res = await fetch(BASE + '/predict', { method: 'POST', body: fd });
+    const ms = Date.now() - t0;
+    const data = await res.json();
+    showResp(data, ms, res.ok);
+    if (data.confidence) showPredictResult(data);
+  } catch(e) {
+    showErr('오류: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '예측 실행';
+  }
+}
+
+/* ── DETECT MULTI ── */
+async function callDetectMulti() {
+  const raw = document.getElementById('multi-classes').value;
+  const classes = raw.split(',').map(s => s.trim()).filter(Boolean);
+  const t0 = Date.now();
+  try {
+    const res = await fetch(BASE + '/detect_multi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ classes })
+    });
+    const ms = Date.now() - t0;
+    const data = await res.json();
+    showResp(data, ms, res.ok);
+  } catch(e) {
+    showErr('오류: ' + e.message);
+  }
+}
+
+/* ── Predict result visual ── */
+const CLASS_KOR = {
+  snack_bag: '과자봉지/비닐', glass_bottle: '유리병/음료수병',
+  paper: '종이류/포장상자', can: '캔/음료수캔', pet_bottle: '페트병'
+};
+function showPredictResult(data) {
+  if (!data.confidence) return;
+  const pct = Math.round(data.confidence * 100);
+  const color = pct >= 80 ? '#00e676' : pct >= 60 ? '#ffab40' : '#ff5252';
+  document.getElementById('conf-fill').style.width = pct + '%';
+  document.getElementById('conf-fill').style.background = color;
+  document.getElementById('conf-class').textContent = data.class_name || '—';
+  document.getElementById('conf-class').style.color = color;
+  document.getElementById('conf-kor').textContent = data.class_kor || CLASS_KOR[data.class_name] || '';
+  document.getElementById('conf-ms').textContent = '추론시간: ' + (data.inference_ms || '—') + ' ms   |   신뢰도: ' + pct + '%';
+  document.getElementById('predict-result').style.display = 'block';
+}
+
+/* ── 파일 드롭 ── */
+function onFileChange(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const img = document.getElementById('preview-img');
+  img.src = URL.createObjectURL(file);
+  img.style.display = 'block';
+}
+function onDrag(e, over) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.toggle('drag', over);
+}
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    document.getElementById('img-input').files = e.dataTransfer.files;
+    onFileChange({ files: [file] });
+  }
+}
+
+/* ── 전체 GET 일괄 테스트 ── */
+async function runAll() {
+  const paths = ['/', '/health', '/stats', '/latest', '/collected', '/webcam/state'];
+  const results = {};
+  for (const p of paths) {
+    try {
+      const res = await fetch(BASE + p, { signal: AbortSignal.timeout(3000) });
+      const data = await res.json();
+      results[p] = { status: res.status, data };
+    } catch(e) {
+      results[p] = { status: 'ERROR', error: e.message };
+    }
+  }
+  const body = document.getElementById('resp-body');
+  body.className = '';
+  body.innerHTML = syntaxHighlight(JSON.stringify(results, null, 2));
+  document.getElementById('resp-status').textContent = '전체 테스트 완료';
+  document.getElementById('resp-status').className = 'ok';
+  document.getElementById('resp-time').textContent = paths.length + '개 엔드포인트';
+}
+</script>
+</body>
+</html>

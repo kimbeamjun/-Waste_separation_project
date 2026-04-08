@@ -99,11 +99,12 @@ def send_to_arduino(msg: str):
         print(f"  ⚠️  아두이노 전송 오류: {e}")
 
 
-def send_detected(classes: list):
+def send_detected(classes: list, confidence: float = 0.0):
     """
     감지된 클래스 목록 → 아두이노로 전송
-    단일: "0\n"
-    다중: "M024\n"
+    단일 (신뢰도 포함): "S3:72\n"  → LCD에 신뢰도 바 표시
+    다중:               "M024\n"
+    없음:               "X\n"
     """
     codes = "".join(CLASS_CMD[c] for c in classes if c in CLASS_CMD)
     if not codes:
@@ -111,7 +112,9 @@ def send_detected(classes: list):
         return
 
     if len(codes) == 1:
-        send_to_arduino(codes)
+        # 신뢰도 포함 단일 감지 커맨드 (LCD용)
+        conf_int = max(0, min(100, int(confidence * 100)))
+        send_to_arduino(f"S{codes}:{conf_int}")
     else:
         send_to_arduino(f"M{codes}")
 
@@ -257,7 +260,8 @@ def run():
                 led_off_tick = 0
 
                 # ★ 매 폴링마다 무조건 LED 전송 (박스 떠있는 동안 계속 점등)
-                send_detected(classes)
+                confidence = res.get("confidence", 0.0)
+                send_detected(classes, confidence)
 
                 # 클래스 바뀐 경우만 콘솔 출력
                 if set(classes) != set(last_classes):
