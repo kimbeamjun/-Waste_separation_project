@@ -18,6 +18,8 @@ FastAPI AI 서버 (step5_api_server.py)  ← 이 파일
 import io
 import time
 import logging
+import sqlite3
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -41,6 +43,7 @@ PORT           = 8000
 LOG_DIR        = "./logs"          # 예측 로그 저장 폴더 (피드백 루프용)
 SAVE_IMAGES    = True              # 수신 이미지 저장 여부 (재학습 데이터 수집용)
 SAVE_IMAGE_DIR = "./collected_data"  # 수집 이미지 저장 폴더
+DB_PATH        = "./logs/predictions.db"  # SQLite DB 경로
 
 CLASS_KOR = {
     "snack_bag":    "과자봉지/비닐",
@@ -88,12 +91,63 @@ app.add_middleware(
 # ════════════════════════════════════════════════
 model = None
 
+
+# ════════════════════════════════════════════════
+# SQLite DB 초기화 및 유틸
+# ════════════════════════════════════════════════
+_db_lock = threading.Lock()
+
+def init_db():
+    """DB 파일 생성 및 테이블 초기화"""
+    Path(DB_PATH).parent.mkdir(exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS predictions (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp    TEXT    NOT NULL,
+                class_name   TEXT    NOT NULL,
+                class_kor    TEXT    NOT NULL,
+                confidence   REAL    NOT NULL,
+                inference_ms REAL    NOT NULL,
+                filename     TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_timestamp
+            ON predictions (timestamp)
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_class
+            ON predictions (class_name)
+        """)
+        conn.commit()
+    logger.info(f"✅ SQLite DB 초기화: {DB_PATH}")
+
+def db_insert(timestamp, class_name, class_kor, confidence, inference_ms, filename):
+    """예측 결과를 DB에 비동기 삽입 (메인 루프 블로킹 방지)"""
+    def _insert():
+        with _db_lock:
+            try:
+                with sqlite3.connect(DB_PATH) as conn:
+                    conn.execute(
+                        "INSERT INTO predictions "
+                        "(timestamp, class_name, class_kor, confidence, inference_ms, filename) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (timestamp, class_name, class_kor,
+                         round(confidence, 4), round(inference_ms, 2), filename)
+                    )
+                    conn.commit()
+            except Exception as e:
+                logger.warning(f"DB 삽입 오류: {e}")
+    threading.Thread(target=_insert, daemon=True).start()
+
 @app.on_event("startup")
 async def load_model():
     global model
     if not Path(WEIGHTS_PATH).exists():
         logger.error(f"모델 파일 없음: {WEIGHTS_PATH}")
         return
+    init_db()
     model = YOLO(WEIGHTS_PATH)
     logger.info(f"✅ 모델 로드 완료: {WEIGHTS_PATH}")
 
@@ -157,201 +211,161 @@ webcam_state = {
 # ════════════════════════════════════════════════
 # 루트 대시보드 HTML  (CSS 이스케이프 없는 .replace() 전용 버전)
 # ════════════════════════════════════════════════
-ROOT_HTML = """<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>폐기물 분류 AI 서버</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{background:#0d1117;color:#e6edf3;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.6;min-height:100vh;}
-::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
-.hdr{background:#161b22;border-bottom:1px solid #21262d;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
-.hdr-left{display:flex;align-items:center;gap:14px;}
-.logo{width:40px;height:40px;background:linear-gradient(135deg,#238636,#1f6feb);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
-.hdr-title{font-size:16px;font-weight:600;}
-.hdr-sub{font-size:11px;color:#6e7681;font-family:monospace;margin-top:1px;}
-.srv-pill{display:flex;align-items:center;gap:7px;background:#161b22;border:1px solid #21262d;border-radius:20px;padding:6px 14px;font-size:12px;font-family:monospace;}
-.dot{width:8px;height:8px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb950;animation:pulse 2s infinite;display:inline-block;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-.wrap{max-width:1100px;margin:0 auto;padding:28px 32px;}
-.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:28px;}
-.card{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:16px 14px;}
-.card-val{font-size:22px;font-weight:700;font-family:monospace;color:#58a6ff;margin-bottom:3px;}
-.card-lbl{font-size:11px;color:#6e7681;}
-.card.green .card-val{color:#3fb950;}
-.card.amber .card-val{color:#d29922;}
-.sec-title{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;font-family:monospace;margin-bottom:12px;}
-.tbl-wrap{background:#161b22;border:1px solid #21262d;border-radius:12px;overflow:hidden;}
-table{width:100%;border-collapse:collapse;}
-thead tr{background:#21262d;}
-th{padding:10px 16px;text-align:left;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6e7681;font-family:monospace;font-weight:400;}
-td{padding:12px 16px;border-top:1px solid #21262d;vertical-align:middle;}
-tr:hover td{background:#1c2128;}
-.ep{font-family:monospace;font-size:12px;color:#e6edf3;}
-.desc{font-size:12px;color:#8b949e;}
-.badge{display:inline-block;font-family:monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;letter-spacing:.5px;}
-.GET{background:#1f3d6e;color:#58a6ff;border:1px solid #1f6feb55;}
-.POST{background:#1a3d27;color:#3fb950;border:1px solid #2ea04355;}
-.run-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.btn{background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:6px 14px;font-size:12px;font-family:monospace;cursor:pointer;transition:all .15s;white-space:nowrap;}
-.btn:hover{background:#30363d;border-color:#58a6ff;color:#58a6ff;}
-.btn.green:hover{border-color:#3fb950;color:#3fb950;}
-input[type=text]{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:6px 10px;color:#e6edf3;font-family:monospace;font-size:12px;outline:none;transition:border .15s;}
-input[type=text]:focus{border-color:#58a6ff;}
-input[type=file]{font-size:11px;color:#8b949e;font-family:monospace;}
-.resp{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:14px 16px;font-family:monospace;font-size:12px;margin-top:8px;display:none;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;line-height:1.8;}
-.resp.show{display:block;animation:fadeIn .2s;}
-@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-.jk{color:#79c0ff}.js{color:#a5d6ff}.jn{color:#7ee787}.jb{color:#d2a8ff}
-.conf-box{display:none;align-items:center;gap:12px;margin-top:10px;padding:12px 16px;background:#0d1117;border:1px solid #21262d;border-radius:8px;}
-.conf-box.show{display:flex;}
-.conf-name{font-size:18px;font-weight:700;color:#3fb950;}
-.conf-kor{font-size:12px;color:#8b949e;margin-top:2px;}
-.conf-track{flex:1;height:6px;background:#21262d;border-radius:3px;overflow:hidden;}
-.conf-fill{height:100%;border-radius:3px;transition:width .5s,background .3s;}
-.conf-pct{font-family:monospace;font-size:13px;font-weight:700;min-width:40px;text-align:right;}
-.foot{margin-top:40px;padding-top:16px;border-top:1px solid #21262d;color:#6e7681;font-size:12px;font-family:monospace;display:flex;gap:20px;align-items:center;}
-.foot a{color:#58a6ff;text-decoration:none;}
-.foot a:hover{text-decoration:underline;}
-</style>
-</head>
-<body>
-<div class="hdr">
-  <div class="hdr-left">
-    <div class="logo">&#128465;</div>
-    <div>
-      <div class="hdr-title">폐기물 분류 AI 서버</div>
-      <div class="hdr-sub">localhost:8000 &nbsp;&#183;&nbsp; YOLOv8-cls &nbsp;&#183;&nbsp; FastAPI</div>
-    </div>
-  </div>
-  <div class="srv-pill"><span class="dot"></span><span id="srv-txt">__MODEL_STATUS__</span></div>
-</div>
-<div class="wrap">
-  <div class="cards">
-    <div class="card green"><div class="card-val" id="c-total">__TOTAL__</div><div class="card-lbl">총 예측 요청</div></div>
-    <div class="card"><div class="card-val" id="c-uptime">__UPTIME__</div><div class="card-lbl">업타임</div></div>
-    <div class="card amber"><div class="card-val" id="c-conf">&#8212;</div><div class="card-lbl">평균 신뢰도</div></div>
-    <div class="card"><div class="card-val" id="c-lat">&#8212;</div><div class="card-lbl">평균 추론시간</div></div>
-    <div class="card"><div class="card-val" id="c-coll">&#8212;</div><div class="card-lbl">수집 이미지</div></div>
-    <div class="card"><div class="card-val" id="c-ready" style="font-size:14px">&#8212;</div><div class="card-lbl">재학습 준비</div></div>
-  </div>
-  <div class="sec-title">API 엔드포인트</div>
-  <div class="tbl-wrap">
-    <table>
-      <thead><tr><th style="width:70px">Method</th><th style="width:200px">경로</th><th>설명</th><th style="width:320px">실행</th></tr></thead>
-      <tbody>
-        <tr><td><span class="badge GET">GET</span></td><td class="ep">/health</td><td class="desc">헬스체크 &#8212; 모델 로드 여부, 업타임</td><td><button class="btn" onclick="runGet('/health','r1')">&#9654; 실행</button></td></tr>
-        <tr><td colspan="4"><div id="r1" class="resp"></div></td></tr>
-        <tr><td><span class="badge POST">POST</span></td><td class="ep">/predict</td><td class="desc">이미지 업로드 &#8594; 폐기물 분류 예측</td><td><div class="run-row"><input type="file" id="fp" accept="image/*"><button class="btn green" onclick="runPredict()">&#9654; 실행</button></div></td></tr>
-        <tr><td colspan="4"><div id="r2" class="resp"></div><div id="conf-box" class="conf-box"><div><div class="conf-name" id="conf-cls"></div><div class="conf-kor" id="conf-kor"></div></div><div class="conf-track"><div class="conf-fill" id="conf-fill"></div></div><div class="conf-pct" id="conf-pct"></div></div></td></tr>
-        <tr><td><span class="badge POST">POST</span></td><td class="ep">/detect_multi</td><td class="desc">다중 감지 결과 등록 (아두이노 LED용)</td><td><div class="run-row"><input type="text" id="fm" value="can,paper" style="width:130px"><button class="btn green" onclick="runMulti()">&#9654; 실행</button></div></td></tr>
-        <tr><td colspan="4"><div id="r3" class="resp"></div></td></tr>
-        <tr><td><span class="badge GET">GET</span></td><td class="ep">/stats</td><td class="desc">서버 통계 &#8212; 클래스별 카운트, 신뢰도, 레이턴시</td><td><button class="btn" onclick="runGet('/stats','r4')">&#9654; 실행</button></td></tr>
-        <tr><td colspan="4"><div id="r4" class="resp"></div></td></tr>
-        <tr><td><span class="badge GET">GET</span></td><td class="ep">/latest</td><td class="desc">최신 감지 결과 &#8212; 아두이노 step8 폴링용</td><td><button class="btn" onclick="runGet('/latest','r5')">&#9654; 실행</button></td></tr>
-        <tr><td colspan="4"><div id="r5" class="resp"></div></td></tr>
-        <tr><td><span class="badge GET">GET</span></td><td class="ep">/collected</td><td class="desc">재학습 수집 데이터 현황 &#8212; retrain_ready 포함</td><td><button class="btn" onclick="runGet('/collected','r6')">&#9654; 실행</button></td></tr>
-        <tr><td colspan="4"><div id="r6" class="resp"></div></td></tr>
-        <tr><td><span class="badge POST">POST</span></td><td class="ep">/webcam/pause</td><td class="desc">웹캠 분류 일시정지</td><td><button class="btn" onclick="runPost('/webcam/pause','r7')">&#9654; 실행</button></td></tr>
-        <tr><td colspan="4"><div id="r7" class="resp"></div></td></tr>
-        <tr><td><span class="badge POST">POST</span></td><td class="ep">/webcam/resume</td><td class="desc">웹캠 분류 재개</td><td><button class="btn" onclick="runPost('/webcam/resume','r8')">&#9654; 실행</button></td></tr>
-        <tr><td colspan="4"><div id="r8" class="resp"></div></td></tr>
-        <tr><td><span class="badge POST">POST</span></td><td class="ep">/webcam/capture</td><td class="desc">현재 프레임 캡처 저장 요청</td><td><button class="btn" onclick="runPost('/webcam/capture','r9')">&#9654; 실행</button></td></tr>
-        <tr><td colspan="4"><div id="r9" class="resp"></div></td></tr>
-        <tr><td><span class="badge GET">GET</span></td><td class="ep">/webcam/state</td><td class="desc">웹캠 제어 상태 (paused, capture 카운트)</td><td><button class="btn" onclick="runGet('/webcam/state','r10')">&#9654; 실행</button></td></tr>
-        <tr><td colspan="4"><div id="r10" class="resp"></div></td></tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="foot">
-    <span><span class="dot"></span> 서버 실행 중</span>
-    <span>자동 API 문서: <a href="/docs">/docs</a></span>
-    <span><a href="/redoc">/redoc</a></span>
-  </div>
-</div>
-<script>
-function hl(j){
-  return j.replace(/(\"(?:\\\\u[0-9a-fA-F]{4}|\\\\[^u]|[^\\\\\"])*\"(?:\\s*:)?|\\b(?:true|false|null)\\b|-?\\d+\\.?\\d*)/g,function(m){
-    var c='jn';
-    if(/^"/.test(m)) c=/:$/.test(m)?'jk':'js';
-    else if(/true|false/.test(m)) c='jb';
-    return '<span class="'+c+'">'+m+'</span>';
-  });
-}
-function show(id,data){var e=document.getElementById(id);e.innerHTML=hl(JSON.stringify(data,null,2));e.classList.add('show');}
-async function runGet(p,id){
-  try{var r=await fetch(p);show(id,await r.json());}
-  catch(e){var el=document.getElementById(id);el.textContent='오류: '+e.message;el.classList.add('show');}
-}
-async function runPost(p,id){
-  try{var r=await fetch(p,{method:'POST'});show(id,await r.json());}
-  catch(e){var el=document.getElementById(id);el.textContent='오류: '+e.message;el.classList.add('show');}
-}
-async function runPredict(){
-  var f=document.getElementById('fp').files[0];
-  if(!f){alert('이미지를 먼저 선택하세요');return;}
-  var fd=new FormData();fd.append('file',f);
-  try{
-    var r=await fetch('/predict',{method:'POST',body:fd});
-    var d=await r.json();show('r2',d);
-    if(d.confidence){
-      var pct=Math.round(d.confidence*100);
-      var color=pct>=80?'#3fb950':pct>=60?'#d29922':'#f85149';
-      document.getElementById('conf-cls').textContent=d.class_name||'';
-      document.getElementById('conf-cls').style.color=color;
-      document.getElementById('conf-kor').textContent=d.class_kor||'';
-      document.getElementById('conf-fill').style.width=pct+'%';
-      document.getElementById('conf-fill').style.background=color;
-      document.getElementById('conf-pct').textContent=pct+'%';
-      document.getElementById('conf-pct').style.color=color;
-      document.getElementById('conf-box').classList.add('show');
-    }
-  }catch(e){var el=document.getElementById('r2');el.textContent='오류: '+e.message;el.classList.add('show');}
-}
-async function runMulti(){
-  var cls=document.getElementById('fm').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-  try{
-    var r=await fetch('/detect_multi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({classes:cls})});
-    show('r3',await r.json());
-  }catch(e){var el=document.getElementById('r3');el.textContent='오류: '+e.message;el.classList.add('show');}
-}
-async function loadCards(){
-  try{
-    var s=await(await fetch('/stats')).json();
-    if(s.avg_confidence)document.getElementById('c-conf').textContent=(s.avg_confidence*100).toFixed(1)+'%';
-    if(s.avg_latency_ms)document.getElementById('c-lat').textContent=s.avg_latency_ms.toFixed(1)+'ms';
-    document.getElementById('c-total').textContent=s.total_requests||0;
-  }catch(e){}
-  try{
-    var c=await(await fetch('/collected')).json();
-    var tot=Object.values(c.counts||{}).reduce(function(a,b){return a+b;},0);
-    document.getElementById('c-coll').textContent=tot;
-    document.getElementById('c-ready').textContent=c.retrain_ready?'Ready':'Collecting...';
-    document.getElementById('c-ready').style.color=c.retrain_ready?'#3fb950':'#d29922';
-  }catch(e){}
-  try{
-    var h=await(await fetch('/health')).json();
-    document.getElementById('c-uptime').textContent=h.uptime||'--';
-  }catch(e){}
-}
-loadCards();
-setInterval(loadCards,10000);
-</script>
-</body>
-</html>"""
+# ════════════════════════════════════════════════
+# 루트 대시보드 HTML — dashboard.html 파일에서 로드
+# ════════════════════════════════════════════════
+_DASHBOARD_PATH = Path(__file__).parent / "dashboard.html"
 
+def _load_dashboard(uptime: str, model_status: str, total: int) -> str:
+    """dashboard.html 을 읽어서 플레이스홀더 치환 후 반환"""
+    if not _DASHBOARD_PATH.exists():
+        return (
+            "<h2>dashboard.html 파일이 없습니다.</h2>"
+            "<p>step5_api_server.py 와 같은 폴더에 dashboard.html 을 넣어주세요.</p>"
+        )
+    html = _DASHBOARD_PATH.read_text(encoding="utf-8")
+    return (
+        html
+        .replace("__UPTIME__",       uptime)
+        .replace("__MODEL_STATUS__", model_status)
+        .replace("__TOTAL__",        str(total))
+    )
+
+
+
+
+# ════════════════════════════════════════════════
+# 예측 로그 DB 조회 API
+# ════════════════════════════════════════════════
+@app.get("/logs", summary="예측 로그 조회")
+async def get_logs(
+    limit:      int = 50,
+    class_name: str = None,
+    date:       str = None,
+):
+    """
+    SQLite DB에서 예측 로그를 조회합니다.
+
+    - **limit**: 최대 조회 수 (기본 50, 최대 500)
+    - **class_name**: 특정 클래스만 필터 (예: can, paper)
+    - **date**: 날짜 필터 (예: 2026-04-10)
+    """
+    limit = min(limit, 500)
+    query = "SELECT id, timestamp, class_name, class_kor, confidence, inference_ms, filename FROM predictions"
+    params = []
+    conditions = []
+
+    if class_name:
+        conditions.append("class_name = ?")
+        params.append(class_name)
+    if date:
+        conditions.append("timestamp LIKE ?")
+        params.append(f"{date}%")
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(query, params).fetchall()
+        return {
+            "count": len(rows),
+            "limit": limit,
+            "logs":  [dict(r) for r in rows],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/logs/summary", summary="예측 로그 통계 요약")
+async def get_logs_summary():
+    """
+    DB 전체 예측 로그 기반 통계를 반환합니다.
+    - 총 예측 수, 클래스별 카운트 및 비율
+    - 시간대별 예측 분포 (0~23시)
+    - 평균/최소/최대 신뢰도 및 추론 시간
+    """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            total = conn.execute("SELECT COUNT(*) FROM predictions").fetchone()[0]
+            if total == 0:
+                return {"total": 0, "message": "No predictions yet"}
+
+            # 클래스별 카운트
+            class_rows = conn.execute(
+                "SELECT class_name, class_kor, COUNT(*) as cnt, "
+                "AVG(confidence) as avg_conf "
+                "FROM predictions GROUP BY class_name ORDER BY cnt DESC"
+            ).fetchall()
+
+            # 시간대별 분포
+            hour_rows = conn.execute(
+                "SELECT SUBSTR(timestamp, 12, 2) as hour, COUNT(*) as cnt "
+                "FROM predictions GROUP BY hour ORDER BY hour"
+            ).fetchall()
+
+            # 전체 성능 지표
+            perf = conn.execute(
+                "SELECT AVG(confidence) as avg_conf, MIN(confidence) as min_conf, "
+                "MAX(confidence) as max_conf, AVG(inference_ms) as avg_ms, "
+                "MIN(inference_ms) as min_ms, MAX(inference_ms) as max_ms "
+                "FROM predictions"
+            ).fetchone()
+
+            # 날짜별 최근 7일
+            daily_rows = conn.execute(
+                "SELECT SUBSTR(timestamp, 1, 10) as date, COUNT(*) as cnt "
+                "FROM predictions "
+                "GROUP BY date ORDER BY date DESC LIMIT 7"
+            ).fetchall()
+
+        return {
+            "total": total,
+            "by_class": [
+                {
+                    "class_name": r[0],
+                    "class_kor":  r[1],
+                    "count":      r[2],
+                    "ratio":      round(r[2] / total * 100, 1),
+                    "avg_conf":   round(r[3] * 100, 1),
+                }
+                for r in class_rows
+            ],
+            "by_hour":  {r[0]: r[1] for r in hour_rows},
+            "by_date":  {r[0]: r[1] for r in daily_rows},
+            "performance": {
+                "avg_confidence":  round(perf[0] * 100, 1),
+                "min_confidence":  round(perf[1] * 100, 1),
+                "max_confidence":  round(perf[2] * 100, 1),
+                "avg_latency_ms":  round(perf[3], 2),
+                "min_latency_ms":  round(perf[4], 2),
+                "max_latency_ms":  round(perf[5], 2),
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/logs", summary="예측 로그 전체 삭제")
+async def clear_logs():
+    """DB의 모든 예측 로그를 삭제합니다. (초기화용)"""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("DELETE FROM predictions")
+            conn.commit()
+        return {"ok": True, "message": "All logs cleared"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/", summary="서버 상태 확인", response_class=HTMLResponse)
 async def root():
-    uptime = str(datetime.now() - stats["start_time"]).split(".")[0]
+    uptime       = str(datetime.now() - stats["start_time"]).split(".")[0]
     model_status = "Model Loaded" if model is not None else "Model Not Loaded"
-    html = ROOT_HTML \
-        .replace("__UPTIME__", uptime) \
-        .replace("__MODEL_STATUS__", model_status) \
-        .replace("__TOTAL__", str(stats["total"]))
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=_load_dashboard(uptime, model_status, stats["total"]))
+
 
 @app.get("/health", response_model=HealthResponse, summary="헬스체크")
 async def health():
@@ -413,6 +427,9 @@ async def predict(file: UploadFile = File(..., description="분류할 이미지 
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / f"{timestamp.replace(':', '-')}_{stats['total']:06d}.jpg"
         img_pil.save(save_path)
+
+    # DB에 예측 로그 저장
+    db_insert(timestamp, class_name, class_kor, top1_conf, elapsed, file.filename)
 
     logger.info(
         f"예측: {class_kor} ({top1_conf:.1%}) | "

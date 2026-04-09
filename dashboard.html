@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>폐기물 분류 AI 서버</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#0d1117; color:#e6edf3;
+  font-family:-apple-system,'Segoe UI',sans-serif;
+  font-size:14px; line-height:1.6; min-height:100vh;
+}
+::-webkit-scrollbar { width:5px }
+::-webkit-scrollbar-thumb { background:#30363d; border-radius:3px }
+
+/* ── header ── */
+.hdr {
+  background:#161b22; border-bottom:1px solid #21262d;
+  padding:16px 32px; display:flex; align-items:center;
+  justify-content:space-between; position:sticky; top:0; z-index:50;
+}
+.hdr-left { display:flex; align-items:center; gap:14px; }
+.logo {
+  width:40px; height:40px;
+  background:linear-gradient(135deg,#238636,#1f6feb);
+  border-radius:10px; display:flex; align-items:center;
+  justify-content:center; font-size:20px; flex-shrink:0;
+}
+.hdr-title { font-size:16px; font-weight:600; }
+.hdr-sub   { font-size:11px; color:#6e7681; font-family:monospace; margin-top:1px; }
+.srv-pill {
+  display:flex; align-items:center; gap:7px;
+  background:#161b22; border:1px solid #21262d;
+  border-radius:20px; padding:6px 14px;
+  font-size:12px; font-family:monospace;
+}
+.dot {
+  width:8px; height:8px; border-radius:50%;
+  background:#3fb950; box-shadow:0 0 6px #3fb950;
+  animation:pulse 2s infinite; display:inline-block;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+/* ── layout ── */
+.wrap { max-width:1100px; margin:0 auto; padding:28px 32px; }
+
+/* ── stat cards ── */
+.cards {
+  display:grid; grid-template-columns:repeat(6,1fr);
+  gap:10px; margin-bottom:28px;
+}
+.card { background:#161b22; border:1px solid #21262d; border-radius:10px; padding:16px 14px; }
+.card-val { font-size:22px; font-weight:700; font-family:monospace; color:#58a6ff; margin-bottom:3px; }
+.card-lbl { font-size:11px; color:#6e7681; }
+.card.green .card-val { color:#3fb950; }
+.card.amber .card-val { color:#d29922; }
+.card.red   .card-val { color:#f85149; }
+
+/* ── section title ── */
+.sec-title {
+  font-size:11px; letter-spacing:1.2px; text-transform:uppercase;
+  color:#6e7681; font-family:monospace; margin-bottom:12px; margin-top:28px;
+}
+
+/* ── retrain alert ── */
+.retrain-alert {
+  display:none; align-items:center; gap:12px;
+  background:#1a2d1a; border:1px solid #2ea043;
+  border-radius:10px; padding:14px 20px; margin-bottom:20px;
+}
+.retrain-alert.show { display:flex; }
+.retrain-alert span { color:#3fb950; font-size:13px; }
+.retrain-btn {
+  margin-left:auto; background:#238636; border:none; color:#fff;
+  border-radius:6px; padding:7px 16px; font-size:12px;
+  font-family:monospace; cursor:pointer;
+}
+.retrain-btn:hover { background:#2ea043; }
+
+/* ── class accuracy bars ── */
+.acc-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:28px; }
+.acc-card {
+  background:#161b22; border:1px solid #21262d;
+  border-radius:10px; padding:14px 12px;
+}
+.acc-cls  { font-size:11px; color:#6e7681; margin-bottom:6px; font-family:monospace; }
+.acc-bar-bg  { background:#21262d; border-radius:4px; height:6px; overflow:hidden; margin-bottom:6px; }
+.acc-bar-fill { height:100%; border-radius:4px; transition:width .5s; }
+.acc-val { font-size:16px; font-weight:700; font-family:monospace; }
+
+/* ── api table ── */
+.tbl-wrap { background:#161b22; border:1px solid #21262d; border-radius:12px; overflow:hidden; }
+table { width:100%; border-collapse:collapse; }
+thead tr { background:#21262d; }
+th {
+  padding:10px 16px; text-align:left;
+  font-size:11px; letter-spacing:1px; text-transform:uppercase;
+  color:#6e7681; font-family:monospace; font-weight:400;
+}
+td { padding:12px 16px; border-top:1px solid #21262d; vertical-align:middle; }
+tr:hover td { background:#1c2128; }
+.ep   { font-family:monospace; font-size:12px; color:#e6edf3; }
+.desc { font-size:12px; color:#8b949e; }
+
+/* ── badges ── */
+.badge {
+  display:inline-block; font-family:monospace; font-size:10px;
+  font-weight:700; padding:3px 8px; border-radius:5px; letter-spacing:.5px;
+}
+.GET  { background:#1f3d6e; color:#58a6ff; border:1px solid #1f6feb55; }
+.POST { background:#1a3d27; color:#3fb950; border:1px solid #2ea04355; }
+
+/* ── controls ── */
+.run-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.btn {
+  background:#21262d; border:1px solid #30363d; color:#c9d1d9;
+  border-radius:6px; padding:6px 14px; font-size:12px;
+  font-family:monospace; cursor:pointer; transition:all .15s; white-space:nowrap;
+}
+.btn:hover { background:#30363d; border-color:#58a6ff; color:#58a6ff; }
+.btn.green:hover { border-color:#3fb950; color:#3fb950; }
+.btn.red   { border-color:#f8514966; color:#f85149; }
+.btn.red:hover { background:#2d1b1b; }
+
+input[type=text] {
+  background:#0d1117; border:1px solid #30363d; border-radius:6px;
+  padding:6px 10px; color:#e6edf3; font-family:monospace;
+  font-size:12px; outline:none; transition:border .15s;
+}
+input[type=text]:focus { border-color:#58a6ff; }
+input[type=file] { font-size:11px; color:#8b949e; font-family:monospace; }
+
+/* ── response box ── */
+.resp {
+  background:#0d1117; border:1px solid #21262d; border-radius:8px;
+  padding:14px 16px; font-family:monospace; font-size:12px;
+  margin-top:8px; display:none; white-space:pre-wrap;
+  word-break:break-all; max-height:200px; overflow-y:auto; line-height:1.8;
+}
+.resp.show { display:block; animation:fadeIn .2s; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
+.jk { color:#79c0ff } .js { color:#a5d6ff } .jn { color:#7ee787 } .jb { color:#d2a8ff }
+
+/* ── confidence box ── */
+.conf-box {
+  display:none; align-items:center; gap:12px;
+  margin-top:10px; padding:12px 16px;
+  background:#0d1117; border:1px solid #21262d; border-radius:8px;
+}
+.conf-box.show  { display:flex; }
+.conf-name      { font-size:18px; font-weight:700; color:#3fb950; }
+.conf-kor       { font-size:12px; color:#8b949e; margin-top:2px; }
+.conf-track     { flex:1; height:6px; background:#21262d; border-radius:3px; overflow:hidden; }
+.conf-fill      { height:100%; border-radius:3px; transition:width .5s,background .3s; }
+.conf-pct       { font-family:monospace; font-size:13px; font-weight:700; min-width:40px; text-align:right; }
+
+/* ── footer ── */
+.foot {
+  margin-top:40px; padding-top:16px; border-top:1px solid #21262d;
+  color:#6e7681; font-size:12px; font-family:monospace;
+  display:flex; gap:20px; align-items:center;
+}
+.foot a { color:#58a6ff; text-decoration:none; }
+.foot a:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="logo">&#128465;</div>
+    <div>
+      <div class="hdr-title">폐기물 분류 AI 서버</div>
+      <div class="hdr-sub">localhost:8000 &nbsp;&#183;&nbsp; YOLOv8-cls &nbsp;&#183;&nbsp; FastAPI</div>
+    </div>
+  </div>
+  <div class="srv-pill">
+    <span class="dot"></span>
+    <span id="srv-txt">__MODEL_STATUS__</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ── Stat Cards ── -->
+  <div class="cards">
+    <div class="card green"><div class="card-val" id="c-total">__TOTAL__</div><div class="card-lbl">총 예측 요청</div></div>
+    <div class="card">     <div class="card-val" id="c-uptime">__UPTIME__</div><div class="card-lbl">업타임</div></div>
+    <div class="card amber"><div class="card-val" id="c-conf">&#8212;</div><div class="card-lbl">평균 신뢰도</div></div>
+    <div class="card">     <div class="card-val" id="c-lat">&#8212;</div><div class="card-lbl">평균 추론시간</div></div>
+    <div class="card">     <div class="card-val" id="c-coll">&#8212;</div><div class="card-lbl">수집 이미지</div></div>
+    <div class="card">     <div class="card-val" id="c-ready" style="font-size:14px">&#8212;</div><div class="card-lbl">재학습 준비</div></div>
+  </div>
+
+  <!-- ── 재학습 준비 알림 배너 ── -->
+  <div class="retrain-alert" id="retrain-banner">
+    <span>&#9989; 수집 데이터 500장 달성 — 재학습이 가능합니다. Colab에서 step2_train_v3.py를 실행하세요.</span>
+    <button class="retrain-btn" onclick="document.getElementById('retrain-banner').classList.remove('show')">확인</button>
+  </div>
+
+  <!-- ── 클래스별 수집 현황 ── -->
+  <div class="sec-title">클래스별 수집 이미지 현황</div>
+  <div class="acc-grid">
+    <div class="acc-card"><div class="acc-cls">can</div><div class="acc-bar-bg"><div class="acc-bar-fill" id="bar-can" style="width:0%;background:#58a6ff"></div></div><div class="acc-val" id="cnt-can" style="color:#58a6ff">0</div></div>
+    <div class="acc-card"><div class="acc-cls">glass_bottle</div><div class="acc-bar-bg"><div class="acc-bar-fill" id="bar-glass" style="width:0%;background:#58a6ff"></div></div><div class="acc-val" id="cnt-glass" style="color:#58a6ff">0</div></div>
+    <div class="acc-card"><div class="acc-cls">paper</div><div class="acc-bar-bg"><div class="acc-bar-fill" id="bar-paper" style="width:0%;background:#58a6ff"></div></div><div class="acc-val" id="cnt-paper" style="color:#58a6ff">0</div></div>
+    <div class="acc-card"><div class="acc-cls">pet_bottle</div><div class="acc-bar-bg"><div class="acc-bar-fill" id="bar-pet" style="width:0%;background:#58a6ff"></div></div><div class="acc-val" id="cnt-pet" style="color:#58a6ff">0</div></div>
+    <div class="acc-card"><div class="acc-cls">snack_bag</div><div class="acc-bar-bg"><div class="acc-bar-fill" id="bar-snack" style="width:0%;background:#58a6ff"></div></div><div class="acc-val" id="cnt-snack" style="color:#58a6ff">0</div></div>
+  </div>
+
+  <!-- ── API 테이블 ── -->
+  <div class="sec-title">API 엔드포인트</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:70px">Method</th>
+          <th style="width:200px">경로</th>
+          <th>설명</th>
+          <th style="width:320px">실행</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr>
+          <td><span class="badge GET">GET</span></td>
+          <td class="ep">/health</td>
+          <td class="desc">헬스체크 &#8212; 모델 로드 여부, 업타임</td>
+          <td><button class="btn" onclick="runGet('/health','r1')">&#9654; 실행</button></td>
+        </tr>
+        <tr><td colspan="4"><div id="r1" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge POST">POST</span></td>
+          <td class="ep">/predict</td>
+          <td class="desc">이미지 업로드 &#8594; 폐기물 분류 예측</td>
+          <td>
+            <div class="run-row">
+              <input type="file" id="fp" accept="image/*">
+              <button class="btn green" onclick="runPredict()">&#9654; 실행</button>
+            </div>
+          </td>
+        </tr>
+        <tr><td colspan="4">
+          <div id="r2" class="resp"></div>
+          <div id="conf-box" class="conf-box">
+            <div>
+              <div class="conf-name" id="conf-cls"></div>
+              <div class="conf-kor"  id="conf-kor"></div>
+            </div>
+            <div class="conf-track"><div class="conf-fill" id="conf-fill"></div></div>
+            <div class="conf-pct" id="conf-pct"></div>
+          </div>
+        </td></tr>
+
+        <tr>
+          <td><span class="badge POST">POST</span></td>
+          <td class="ep">/detect_multi</td>
+          <td class="desc">다중 감지 결과 등록 (아두이노 LED용)</td>
+          <td>
+            <div class="run-row">
+              <input type="text" id="fm" value="can,paper" style="width:130px">
+              <button class="btn green" onclick="runMulti()">&#9654; 실행</button>
+            </div>
+          </td>
+        </tr>
+        <tr><td colspan="4"><div id="r3" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge GET">GET</span></td>
+          <td class="ep">/stats</td>
+          <td class="desc">서버 통계 &#8212; 클래스별 카운트, 신뢰도, 레이턴시</td>
+          <td><button class="btn" onclick="runGet('/stats','r4')">&#9654; 실행</button></td>
+        </tr>
+        <tr><td colspan="4"><div id="r4" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge GET">GET</span></td>
+          <td class="ep">/latest</td>
+          <td class="desc">최신 감지 결과 &#8212; 아두이노 step8 폴링용</td>
+          <td><button class="btn" onclick="runGet('/latest','r5')">&#9654; 실행</button></td>
+        </tr>
+        <tr><td colspan="4"><div id="r5" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge GET">GET</span></td>
+          <td class="ep">/collected</td>
+          <td class="desc">재학습 수집 데이터 현황 &#8212; retrain_ready 포함</td>
+          <td><button class="btn" onclick="runGet('/collected','r6')">&#9654; 실행</button></td>
+        </tr>
+        <tr><td colspan="4"><div id="r6" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge POST">POST</span></td>
+          <td class="ep">/webcam/pause</td>
+          <td class="desc">웹캠 분류 일시정지</td>
+          <td><button class="btn" onclick="runPost('/webcam/pause','r7')">&#9654; 실행</button></td>
+        </tr>
+        <tr><td colspan="4"><div id="r7" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge POST">POST</span></td>
+          <td class="ep">/webcam/resume</td>
+          <td class="desc">웹캠 분류 재개</td>
+          <td><button class="btn" onclick="runPost('/webcam/resume','r8')">&#9654; 실행</button></td>
+        </tr>
+        <tr><td colspan="4"><div id="r8" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge POST">POST</span></td>
+          <td class="ep">/webcam/capture</td>
+          <td class="desc">현재 프레임 캡처 저장 요청</td>
+          <td><button class="btn" onclick="runPost('/webcam/capture','r9')">&#9654; 실행</button></td>
+        </tr>
+        <tr><td colspan="4"><div id="r9" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge GET">GET</span></td>
+          <td class="ep">/webcam/state</td>
+          <td class="desc">웹캠 제어 상태 (paused, capture 카운트)</td>
+          <td><button class="btn" onclick="runGet('/webcam/state','r10')">&#9654; 실행</button></td>
+        </tr>
+        <tr><td colspan="4"><div id="r10" class="resp"></div></td></tr>
+
+        <tr>
+          <td><span class="badge POST">POST</span></td>
+          <td class="ep">/webcam/pause</td>
+          <td class="desc">웹캠 일시정지 (서버 직접 제어)</td>
+          <td>
+            <div class="run-row">
+              <button class="btn" onclick="runPost('/webcam/pause','r11')">&#9654; 일시정지</button>
+              <button class="btn green" onclick="runPost('/webcam/resume','r11')">&#9654; 재개</button>
+            </div>
+          </td>
+        </tr>
+        <tr><td colspan="4"><div id="r11" class="resp"></div></td></tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 예측 로그 섹션 ── -->
+  <div class="sec-title" style="margin-top:32px">예측 로그 (DB)</div>
+
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <select id="log-class" style="background:#161b22;border:1px solid #21262d;color:#e6edf3;border-radius:6px;padding:6px 10px;font-family:monospace;font-size:12px;outline:none;">
+      <option value="">전체 클래스</option>
+      <option value="can">can</option>
+      <option value="glass_bottle">glass_bottle</option>
+      <option value="paper">paper</option>
+      <option value="pet_bottle">pet_bottle</option>
+      <option value="snack_bag">snack_bag</option>
+    </select>
+    <input type="date" id="log-date" style="background:#161b22;border:1px solid #21262d;color:#e6edf3;border-radius:6px;padding:6px 10px;font-family:monospace;font-size:12px;outline:none;">
+    <select id="log-limit" style="background:#161b22;border:1px solid #21262d;color:#e6edf3;border-radius:6px;padding:6px 10px;font-family:monospace;font-size:12px;outline:none;">
+      <option value="20">20건</option>
+      <option value="50" selected>50건</option>
+      <option value="100">100건</option>
+    </select>
+    <button class="btn" onclick="loadLogs()">&#9654; 조회</button>
+    <button class="btn" onclick="loadSummary()">&#128202; 통계 요약</button>
+    <button class="btn" style="margin-left:auto;color:#f85149;border-color:#f8514966;" onclick="clearLogs()">&#128465; 전체 삭제</button>
+  </div>
+
+  <!-- 통계 요약 패널 -->
+  <div id="summary-panel" style="display:none;background:#161b22;border:1px solid #21262d;border-radius:10px;padding:16px;margin-bottom:12px;">
+    <div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6e7681;font-family:monospace;margin-bottom:12px;">통계 요약</div>
+    <div id="summary-content" style="font-family:monospace;font-size:12px;line-height:1.9;color:#e6edf3;white-space:pre-wrap;"></div>
+  </div>
+
+  <!-- 로그 테이블 -->
+  <div class="tbl-wrap">
+    <table id="log-table">
+      <thead>
+        <tr>
+          <th style="width:50px">ID</th>
+          <th style="width:160px">시각</th>
+          <th style="width:120px">클래스</th>
+          <th style="width:120px">한글명</th>
+          <th style="width:90px">신뢰도</th>
+          <th style="width:90px">추론(ms)</th>
+          <th>파일명</th>
+        </tr>
+      </thead>
+      <tbody id="log-tbody">
+        <tr><td colspan="7" style="text-align:center;color:#6e7681;padding:24px;">
+          조회 버튼을 눌러 로그를 불러오세요
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="log-count" style="font-size:11px;color:#6e7681;font-family:monospace;margin-top:6px;"></div>
+
+  <!-- ── Footer ── -->
+  <div class="foot">
+    <span><span class="dot"></span> 서버 실행 중</span>
+    <span>자동 API 문서: <a href="/docs">/docs</a></span>
+    <span><a href="/redoc">/redoc</a></span>
+    <span style="margin-left:auto;color:#444d56">10초마다 자동 갱신</span>
+  </div>
+
+</div>
+
+<script>
+const RETRAIN_GOAL = 100; // 클래스당 목표 수집 수
+
+function hl(j) {
+  return j.replace(/("(?:\\u[0-9a-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+\.?\d*)/g, function(m) {
+    var c = 'jn';
+    if (/^"/.test(m)) c = /:$/.test(m) ? 'jk' : 'js';
+    else if (/true|false/.test(m)) c = 'jb';
+    return '<span class="' + c + '">' + m + '</span>';
+  });
+}
+
+function show(id, data) {
+  var e = document.getElementById(id);
+  e.innerHTML = hl(JSON.stringify(data, null, 2));
+  e.classList.add('show');
+}
+
+async function runGet(p, id) {
+  try { var r = await fetch(p); show(id, await r.json()); }
+  catch(e) { var el = document.getElementById(id); el.textContent = '오류: ' + e.message; el.classList.add('show'); }
+}
+
+async function runPost(p, id) {
+  try { var r = await fetch(p, {method:'POST'}); show(id, await r.json()); }
+  catch(e) { var el = document.getElementById(id); el.textContent = '오류: ' + e.message; el.classList.add('show'); }
+}
+
+async function runPredict() {
+  var f = document.getElementById('fp').files[0];
+  if (!f) { alert('이미지를 먼저 선택하세요'); return; }
+  var fd = new FormData(); fd.append('file', f);
+  try {
+    var r = await fetch('/predict', {method:'POST', body:fd});
+    var d = await r.json(); show('r2', d);
+    if (d.confidence) {
+      var pct   = Math.round(d.confidence * 100);
+      var color = pct >= 80 ? '#3fb950' : pct >= 60 ? '#d29922' : '#f85149';
+      document.getElementById('conf-cls').textContent  = d.class_name || '';
+      document.getElementById('conf-cls').style.color  = color;
+      document.getElementById('conf-kor').textContent  = d.class_kor  || '';
+      document.getElementById('conf-fill').style.width = pct + '%';
+      document.getElementById('conf-fill').style.background = color;
+      document.getElementById('conf-pct').textContent  = pct + '%';
+      document.getElementById('conf-pct').style.color  = color;
+      document.getElementById('conf-box').classList.add('show');
+    }
+  } catch(e) {
+    var el = document.getElementById('r2'); el.textContent = '오류: ' + e.message; el.classList.add('show');
+  }
+}
+
+async function runMulti() {
+  var cls = document.getElementById('fm').value.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  try {
+    var r = await fetch('/detect_multi', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({classes:cls})});
+    show('r3', await r.json());
+  } catch(e) {
+    var el = document.getElementById('r3'); el.textContent = '오류: ' + e.message; el.classList.add('show');
+  }
+}
+
+// 클래스별 수집 바 업데이트
+function updateCollectedBars(counts) {
+  var map = {
+    'can': ['bar-can','cnt-can'],
+    'glass_bottle': ['bar-glass','cnt-glass'],
+    'paper': ['bar-paper','cnt-paper'],
+    'pet_bottle': ['bar-pet','cnt-pet'],
+    'snack_bag': ['bar-snack','cnt-snack'],
+  };
+  var max = Math.max(...Object.values(counts), RETRAIN_GOAL);
+  Object.keys(map).forEach(function(cls) {
+    var n    = counts[cls] || 0;
+    var pct  = Math.min(Math.round(n / max * 100), 100);
+    var color = n >= RETRAIN_GOAL ? '#3fb950' : n >= RETRAIN_GOAL * 0.5 ? '#d29922' : '#58a6ff';
+    var bar  = document.getElementById(map[cls][0]);
+    var cnt  = document.getElementById(map[cls][1]);
+    if (bar) { bar.style.width = pct + '%'; bar.style.background = color; }
+    if (cnt) { cnt.textContent = n; cnt.style.color = color; }
+  });
+}
+
+async function loadCards() {
+  try {
+    var s = await (await fetch('/stats')).json();
+    if (s.avg_confidence) document.getElementById('c-conf').textContent = (s.avg_confidence * 100).toFixed(1) + '%';
+    if (s.avg_latency_ms) document.getElementById('c-lat').textContent  = s.avg_latency_ms.toFixed(1) + 'ms';
+    document.getElementById('c-total').textContent = s.total_requests || 0;
+  } catch(e) {}
+
+  try {
+    var c   = await (await fetch('/collected')).json();
+    var tot = Object.values(c.counts || {}).reduce(function(a,b){ return a+b; }, 0);
+    document.getElementById('c-coll').textContent = tot;
+    var ready = c.retrain_ready;
+    document.getElementById('c-ready').textContent   = ready ? 'Ready !' : 'Collecting...';
+    document.getElementById('c-ready').style.color   = ready ? '#3fb950' : '#d29922';
+    if (ready) document.getElementById('retrain-banner').classList.add('show');
+    if (c.counts) updateCollectedBars(c.counts);
+  } catch(e) {}
+
+  try {
+    var h = await (await fetch('/health')).json();
+    document.getElementById('c-uptime').textContent = h.uptime || '--';
+  } catch(e) {}
+}
+
+// ── 예측 로그 조회 ──────────────────────────────
+async function loadLogs() {
+  var cls   = document.getElementById('log-class').value;
+  var date  = document.getElementById('log-date').value;
+  var limit = document.getElementById('log-limit').value;
+  var url   = '/logs?limit=' + limit;
+  if (cls)  url += '&class_name=' + cls;
+  if (date) url += '&date=' + date;
+
+  try {
+    var data = await (await fetch(url)).json();
+    var tbody = document.getElementById('log-tbody');
+    if (!data.logs || data.logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6e7681;padding:24px;">로그 없음</td></tr>';
+      document.getElementById('log-count').textContent = '0건';
+      return;
+    }
+
+    var CLASS_COLORS = {
+      can:'#58a6ff', glass_bottle:'#f85149',
+      paper:'#3fb950', pet_bottle:'#d2a8ff', snack_bag:'#ffa657'
+    };
+
+    tbody.innerHTML = data.logs.map(function(r) {
+      var pct   = Math.round(r.confidence * 100);
+      var color = pct >= 80 ? '#3fb950' : pct >= 60 ? '#d29922' : '#f85149';
+      var cColor = CLASS_COLORS[r.class_name] || '#8b949e';
+      return '<tr>' +
+        '<td style="color:#6e7681;font-family:monospace;font-size:11px">' + r.id + '</td>' +
+        '<td style="font-family:monospace;font-size:11px;color:#8b949e">' + r.timestamp + '</td>' +
+        '<td><span style="background:#21262d;color:' + cColor + ';font-family:monospace;font-size:11px;padding:2px 8px;border-radius:4px;">' + r.class_name + '</span></td>' +
+        '<td style="font-size:12px">' + r.class_kor + '</td>' +
+        '<td style="font-family:monospace;font-size:12px;color:' + color + ';font-weight:700">' + pct + '%</td>' +
+        '<td style="font-family:monospace;font-size:12px;color:#8b949e">' + r.inference_ms.toFixed(1) + '</td>' +
+        '<td style="font-size:11px;color:#6e7681;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.filename || '-') + '</td>' +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('log-count').textContent = data.count + '건 조회됨 (최근 ' + limit + '건 기준)';
+  } catch(e) {
+    document.getElementById('log-tbody').innerHTML = '<tr><td colspan="7" style="color:#f85149;padding:16px;">오류: ' + e.message + '</td></tr>';
+  }
+}
+
+async function loadSummary() {
+  var panel = document.getElementById('summary-panel');
+  try {
+    var d = await (await fetch('/logs/summary')).json();
+    if (!d.total) {
+      panel.style.display = 'block';
+      document.getElementById('summary-content').textContent = 'No predictions yet.';
+      return;
+    }
+
+    var lines = [];
+    lines.push('Total predictions : ' + d.total);
+    lines.push('');
+    lines.push('--- By class ---');
+    d.by_class.forEach(function(c) {
+      var bar = '█'.repeat(Math.round(c.ratio / 5));
+      lines.push(c.class_name.padEnd(15) + c.count.toString().padStart(5) + '건  ' +
+                 c.ratio.toFixed(1).padStart(5) + '%  avg ' + c.avg_conf + '%  ' + bar);
+    });
+    lines.push('');
+    lines.push('--- Performance ---');
+    var p = d.performance;
+    lines.push('Confidence  avg=' + p.avg_confidence + '%  min=' + p.min_confidence + '%  max=' + p.max_confidence + '%');
+    lines.push('Latency     avg=' + p.avg_latency_ms + 'ms  min=' + p.min_latency_ms + 'ms  max=' + p.max_latency_ms + 'ms');
+    lines.push('');
+    lines.push('--- Recent 7 days ---');
+    Object.entries(d.by_date).forEach(function(kv) { lines.push(kv[0] + '  ' + kv[1] + '건'); });
+
+    document.getElementById('summary-content').textContent = lines.join('\n');
+    panel.style.display = 'block';
+  } catch(e) {
+    document.getElementById('summary-content').textContent = 'Error: ' + e.message;
+    panel.style.display = 'block';
+  }
+}
+
+async function clearLogs() {
+  if (!confirm('모든 예측 로그를 삭제할까요?')) return;
+  try {
+    await fetch('/logs', { method: 'DELETE' });
+    document.getElementById('log-tbody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6e7681;padding:24px;">로그가 삭제되었습니다.</td></tr>';
+    document.getElementById('log-count').textContent = '';
+    document.getElementById('summary-panel').style.display = 'none';
+  } catch(e) { alert('오류: ' + e.message); }
+}
+
+loadCards();
+setInterval(loadCards, 10000);
+</script>
+</body>
+</html>
