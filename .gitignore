@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.pt
+collected_data/
+logs/
+dataset/
+runs/
+hand_landmarker.task
+.gradio/
