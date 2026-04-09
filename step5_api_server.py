@@ -154,6 +154,9 @@ webcam_state = {
 # ════════════════════════════════════════════════
 # 루트 대시보드 HTML
 # ════════════════════════════════════════════════
+# ════════════════════════════════════════════════
+# 루트 대시보드 HTML  (CSS 이스케이프 없는 .replace() 전용 버전)
+# ════════════════════════════════════════════════
 ROOT_HTML = """<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -161,261 +164,180 @@ ROOT_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>폐기물 분류 AI 서버</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+KR:wght@300;400;600&display=swap');
-  :root{{--bg:#0b0f14;--bg2:#111720;--bg3:#181f2a;--bd:#1e2d3d;--green:#00e676;--blue:#40c4ff;--amber:#ffab40;--red:#ff5252;--text:#cdd9e5;--muted:#4a5568;}}
-  *{{margin:0;padding:0;box-sizing:border-box;}}
-  body{{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;line-height:1.6;padding:32px;}}
-  h1{{font-size:22px;font-weight:600;letter-spacing:-0.5px;display:flex;align-items:center;gap:12px;margin-bottom:4px;}}
-  .sub{{color:var(--muted);font-size:13px;margin-bottom:28px;font-family:'JetBrains Mono',monospace;}}
-  .cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:32px;}}
-  .card{{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:18px 16px;}}
-  .card .val{{font-size:24px;font-weight:600;color:var(--green);font-family:'JetBrains Mono',monospace;}}
-  .card .lbl{{font-size:11px;color:var(--muted);margin-top:4px;}}
-  .dot{{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);margin-right:6px;}}
-  .section-title{{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-bottom:12px;margin-top:28px;}}
-  table{{width:100%;border-collapse:collapse;background:var(--bg2);border-radius:10px;overflow:hidden;border:1px solid var(--bd);}}
-  th{{background:var(--bg3);padding:10px 16px;text-align:left;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace;font-weight:400;}}
-  td{{padding:11px 16px;border-top:1px solid var(--bd);font-size:13px;vertical-align:middle;}}
-  tr:hover td{{background:var(--bg3);}}
-  .badge{{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;min-width:44px;text-align:center;}}
-  .GET{{background:#1a3a5c;color:var(--blue);}}
-  .POST{{background:#1a3d27;color:var(--green);}}
-  .ep-path{{font-family:'JetBrains Mono',monospace;font-size:12px;}}
-  .try-btn{{background:var(--bg3);border:1px solid var(--bd);color:var(--text);border-radius:6px;padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-block;}}
-  .try-btn:hover{{border-color:var(--green);color:var(--green);}}
-  .resp-box{{background:var(--bg3);border:1px solid var(--bd);border-radius:8px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:8px;display:none;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;line-height:1.7;}}
-  .resp-box.show{{display:block;}}
-  .json-key{{color:var(--blue);}} .json-str{{color:var(--amber);}} .json-num{{color:#b5e8b0;}} .json-bool{{color:#c792ea;}}
-  .run-row{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}}
-  input[type=text]{{background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:5px 10px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;outline:none;transition:border .15s;}}
-  input[type=text]:focus{{border-color:var(--green);}}
-  input[type=file]{{color:var(--muted);font-size:12px;font-family:'JetBrains Mono',monospace;}}
-  .conf-bar{{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-top:6px;width:180px;display:inline-block;vertical-align:middle;}}
-  .conf-fill{{height:100%;border-radius:3px;transition:width .4s;}}
-  footer{{margin-top:40px;color:var(--muted);font-size:11px;font-family:'JetBrains Mono',monospace;border-top:1px solid var(--bd);padding-top:16px;}}
-  ::-webkit-scrollbar{{width:4px;}} ::-webkit-scrollbar-thumb{{background:var(--bd);border-radius:2px;}}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0d1117;color:#e6edf3;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.6;min-height:100vh;}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+.hdr{background:#161b22;border-bottom:1px solid #21262d;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.hdr-left{display:flex;align-items:center;gap:14px;}
+.logo{width:40px;height:40px;background:linear-gradient(135deg,#238636,#1f6feb);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.hdr-title{font-size:16px;font-weight:600;}
+.hdr-sub{font-size:11px;color:#6e7681;font-family:monospace;margin-top:1px;}
+.srv-pill{display:flex;align-items:center;gap:7px;background:#161b22;border:1px solid #21262d;border-radius:20px;padding:6px 14px;font-size:12px;font-family:monospace;}
+.dot{width:8px;height:8px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb950;animation:pulse 2s infinite;display:inline-block;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 32px;}
+.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:28px;}
+.card{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:16px 14px;}
+.card-val{font-size:22px;font-weight:700;font-family:monospace;color:#58a6ff;margin-bottom:3px;}
+.card-lbl{font-size:11px;color:#6e7681;}
+.card.green .card-val{color:#3fb950;}
+.card.amber .card-val{color:#d29922;}
+.sec-title{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;font-family:monospace;margin-bottom:12px;}
+.tbl-wrap{background:#161b22;border:1px solid #21262d;border-radius:12px;overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+thead tr{background:#21262d;}
+th{padding:10px 16px;text-align:left;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#6e7681;font-family:monospace;font-weight:400;}
+td{padding:12px 16px;border-top:1px solid #21262d;vertical-align:middle;}
+tr:hover td{background:#1c2128;}
+.ep{font-family:monospace;font-size:12px;color:#e6edf3;}
+.desc{font-size:12px;color:#8b949e;}
+.badge{display:inline-block;font-family:monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;letter-spacing:.5px;}
+.GET{background:#1f3d6e;color:#58a6ff;border:1px solid #1f6feb55;}
+.POST{background:#1a3d27;color:#3fb950;border:1px solid #2ea04355;}
+.run-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.btn{background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:6px 14px;font-size:12px;font-family:monospace;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.btn:hover{background:#30363d;border-color:#58a6ff;color:#58a6ff;}
+.btn.green:hover{border-color:#3fb950;color:#3fb950;}
+input[type=text]{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:6px 10px;color:#e6edf3;font-family:monospace;font-size:12px;outline:none;transition:border .15s;}
+input[type=text]:focus{border-color:#58a6ff;}
+input[type=file]{font-size:11px;color:#8b949e;font-family:monospace;}
+.resp{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:14px 16px;font-family:monospace;font-size:12px;margin-top:8px;display:none;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;line-height:1.8;}
+.resp.show{display:block;animation:fadeIn .2s;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.jk{color:#79c0ff}.js{color:#a5d6ff}.jn{color:#7ee787}.jb{color:#d2a8ff}
+.conf-box{display:none;align-items:center;gap:12px;margin-top:10px;padding:12px 16px;background:#0d1117;border:1px solid #21262d;border-radius:8px;}
+.conf-box.show{display:flex;}
+.conf-name{font-size:18px;font-weight:700;color:#3fb950;}
+.conf-kor{font-size:12px;color:#8b949e;margin-top:2px;}
+.conf-track{flex:1;height:6px;background:#21262d;border-radius:3px;overflow:hidden;}
+.conf-fill{height:100%;border-radius:3px;transition:width .5s,background .3s;}
+.conf-pct{font-family:monospace;font-size:13px;font-weight:700;min-width:40px;text-align:right;}
+.foot{margin-top:40px;padding-top:16px;border-top:1px solid #21262d;color:#6e7681;font-size:12px;font-family:monospace;display:flex;gap:20px;align-items:center;}
+.foot a{color:#58a6ff;text-decoration:none;}
+.foot a:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
-
-<h1><span style="font-size:28px">🗑️</span> 폐기물 분류 AI 서버</h1>
-<div class="sub">http://localhost:8000 &nbsp;|&nbsp; YOLOv8-cls &nbsp;|&nbsp; FastAPI</div>
-
-<!-- 상태 카드 -->
-<div class="cards">
-  <div class="card">
-    <div class="val" id="c-total">{total}</div>
-    <div class="lbl">총 예측 요청 수</div>
+<div class="hdr">
+  <div class="hdr-left">
+    <div class="logo">&#128465;</div>
+    <div>
+      <div class="hdr-title">폐기물 분류 AI 서버</div>
+      <div class="hdr-sub">localhost:8000 &nbsp;&#183;&nbsp; YOLOv8-cls &nbsp;&#183;&nbsp; FastAPI</div>
+    </div>
   </div>
-  <div class="card">
-    <div class="val" id="c-uptime">{uptime}</div>
-    <div class="lbl">서버 업타임</div>
+  <div class="srv-pill"><span class="dot"></span><span id="srv-txt">__MODEL_STATUS__</span></div>
+</div>
+<div class="wrap">
+  <div class="cards">
+    <div class="card green"><div class="card-val" id="c-total">__TOTAL__</div><div class="card-lbl">총 예측 요청</div></div>
+    <div class="card"><div class="card-val" id="c-uptime">__UPTIME__</div><div class="card-lbl">업타임</div></div>
+    <div class="card amber"><div class="card-val" id="c-conf">&#8212;</div><div class="card-lbl">평균 신뢰도</div></div>
+    <div class="card"><div class="card-val" id="c-lat">&#8212;</div><div class="card-lbl">평균 추론시간</div></div>
+    <div class="card"><div class="card-val" id="c-coll">&#8212;</div><div class="card-lbl">수집 이미지</div></div>
+    <div class="card"><div class="card-val" id="c-ready" style="font-size:14px">&#8212;</div><div class="card-lbl">재학습 준비</div></div>
   </div>
-  <div class="card">
-    <div class="val" id="c-model" style="font-size:16px">{model_status}</div>
-    <div class="lbl">모델 상태</div>
+  <div class="sec-title">API 엔드포인트</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:70px">Method</th><th style="width:200px">경로</th><th>설명</th><th style="width:320px">실행</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge GET">GET</span></td><td class="ep">/health</td><td class="desc">헬스체크 &#8212; 모델 로드 여부, 업타임</td><td><button class="btn" onclick="runGet('/health','r1')">&#9654; 실행</button></td></tr>
+        <tr><td colspan="4"><div id="r1" class="resp"></div></td></tr>
+        <tr><td><span class="badge POST">POST</span></td><td class="ep">/predict</td><td class="desc">이미지 업로드 &#8594; 폐기물 분류 예측</td><td><div class="run-row"><input type="file" id="fp" accept="image/*"><button class="btn green" onclick="runPredict()">&#9654; 실행</button></div></td></tr>
+        <tr><td colspan="4"><div id="r2" class="resp"></div><div id="conf-box" class="conf-box"><div><div class="conf-name" id="conf-cls"></div><div class="conf-kor" id="conf-kor"></div></div><div class="conf-track"><div class="conf-fill" id="conf-fill"></div></div><div class="conf-pct" id="conf-pct"></div></div></td></tr>
+        <tr><td><span class="badge POST">POST</span></td><td class="ep">/detect_multi</td><td class="desc">다중 감지 결과 등록 (아두이노 LED용)</td><td><div class="run-row"><input type="text" id="fm" value="can,paper" style="width:130px"><button class="btn green" onclick="runMulti()">&#9654; 실행</button></div></td></tr>
+        <tr><td colspan="4"><div id="r3" class="resp"></div></td></tr>
+        <tr><td><span class="badge GET">GET</span></td><td class="ep">/stats</td><td class="desc">서버 통계 &#8212; 클래스별 카운트, 신뢰도, 레이턴시</td><td><button class="btn" onclick="runGet('/stats','r4')">&#9654; 실행</button></td></tr>
+        <tr><td colspan="4"><div id="r4" class="resp"></div></td></tr>
+        <tr><td><span class="badge GET">GET</span></td><td class="ep">/latest</td><td class="desc">최신 감지 결과 &#8212; 아두이노 step8 폴링용</td><td><button class="btn" onclick="runGet('/latest','r5')">&#9654; 실행</button></td></tr>
+        <tr><td colspan="4"><div id="r5" class="resp"></div></td></tr>
+        <tr><td><span class="badge GET">GET</span></td><td class="ep">/collected</td><td class="desc">재학습 수집 데이터 현황 &#8212; retrain_ready 포함</td><td><button class="btn" onclick="runGet('/collected','r6')">&#9654; 실행</button></td></tr>
+        <tr><td colspan="4"><div id="r6" class="resp"></div></td></tr>
+        <tr><td><span class="badge POST">POST</span></td><td class="ep">/webcam/pause</td><td class="desc">웹캠 분류 일시정지</td><td><button class="btn" onclick="runPost('/webcam/pause','r7')">&#9654; 실행</button></td></tr>
+        <tr><td colspan="4"><div id="r7" class="resp"></div></td></tr>
+        <tr><td><span class="badge POST">POST</span></td><td class="ep">/webcam/resume</td><td class="desc">웹캠 분류 재개</td><td><button class="btn" onclick="runPost('/webcam/resume','r8')">&#9654; 실행</button></td></tr>
+        <tr><td colspan="4"><div id="r8" class="resp"></div></td></tr>
+        <tr><td><span class="badge POST">POST</span></td><td class="ep">/webcam/capture</td><td class="desc">현재 프레임 캡처 저장 요청</td><td><button class="btn" onclick="runPost('/webcam/capture','r9')">&#9654; 실행</button></td></tr>
+        <tr><td colspan="4"><div id="r9" class="resp"></div></td></tr>
+        <tr><td><span class="badge GET">GET</span></td><td class="ep">/webcam/state</td><td class="desc">웹캠 제어 상태 (paused, capture 카운트)</td><td><button class="btn" onclick="runGet('/webcam/state','r10')">&#9654; 실행</button></td></tr>
+        <tr><td colspan="4"><div id="r10" class="resp"></div></td></tr>
+      </tbody>
+    </table>
   </div>
-  <div class="card">
-    <div class="val" id="c-conf">—</div>
-    <div class="lbl">평균 신뢰도</div>
-  </div>
-  <div class="card">
-    <div class="val" id="c-lat">—</div>
-    <div class="lbl">평균 추론 시간</div>
-  </div>
-  <div class="card">
-    <div class="val" id="c-collected">—</div>
-    <div class="lbl">수집 이미지 수</div>
+  <div class="foot">
+    <span><span class="dot"></span> 서버 실행 중</span>
+    <span>자동 API 문서: <a href="/docs">/docs</a></span>
+    <span><a href="/redoc">/redoc</a></span>
   </div>
 </div>
-
-<!-- API 표 -->
-<div class="section-title">API 엔드포인트</div>
-<table>
-  <thead><tr><th>Method</th><th>경로</th><th>설명</th><th>실행</th></tr></thead>
-  <tbody>
-
-    <tr>
-      <td><span class="badge GET">GET</span></td>
-      <td class="ep-path">/health</td>
-      <td>헬스체크 — 모델 로드 여부, 업타임</td>
-      <td><button class="try-btn" onclick="runGet('/health','r-health')">▶ 실행</button></td>
-    </tr>
-    <tr><td colspan="4"><div id="r-health" class="resp-box"></div></td></tr>
-
-    <tr>
-      <td><span class="badge POST">POST</span></td>
-      <td class="ep-path">/predict</td>
-      <td>이미지 업로드 → 폐기물 분류 예측</td>
-      <td>
-        <div class="run-row">
-          <input type="file" id="f-predict" accept="image/*">
-          <button class="try-btn" onclick="runPredict()">▶ 실행</button>
-        </div>
-      </td>
-    </tr>
-    <tr><td colspan="4">
-      <div id="r-predict" class="resp-box"></div>
-      <div id="conf-visual" style="display:none;padding:10px 0 4px;font-size:13px;">
-        <span id="conf-class" style="font-weight:600;color:var(--green)"></span>
-        <span id="conf-kor" style="color:var(--muted);margin-left:8px;"></span>
-        <span class="conf-bar"><span class="conf-fill" id="conf-fill"></span></span>
-        <span id="conf-pct" style="font-family:'JetBrains Mono',monospace;font-size:12px;margin-left:8px;"></span>
-      </div>
-    </td></tr>
-
-    <tr>
-      <td><span class="badge POST">POST</span></td>
-      <td class="ep-path">/detect_multi</td>
-      <td>다중 감지 결과 등록 (아두이노용)</td>
-      <td>
-        <div class="run-row">
-          <input type="text" id="f-multi" value="can,paper" placeholder="can,paper" style="width:130px">
-          <button class="try-btn" onclick="runMulti()">▶ 실행</button>
-        </div>
-      </td>
-    </tr>
-    <tr><td colspan="4"><div id="r-multi" class="resp-box"></div></td></tr>
-
-    <tr>
-      <td><span class="badge GET">GET</span></td>
-      <td class="ep-path">/stats</td>
-      <td>서버 통계 — 클래스별 카운트, 신뢰도, 레이턴시</td>
-      <td><button class="try-btn" onclick="runGet('/stats','r-stats')">▶ 실행</button></td>
-    </tr>
-    <tr><td colspan="4"><div id="r-stats" class="resp-box"></div></td></tr>
-
-    <tr>
-      <td><span class="badge GET">GET</span></td>
-      <td class="ep-path">/latest</td>
-      <td>최신 감지 결과 (아두이노 step8 폴링용)</td>
-      <td><button class="try-btn" onclick="runGet('/latest','r-latest')">▶ 실행</button></td>
-    </tr>
-    <tr><td colspan="4"><div id="r-latest" class="resp-box"></div></td></tr>
-
-    <tr>
-      <td><span class="badge GET">GET</span></td>
-      <td class="ep-path">/collected</td>
-      <td>재학습 수집 데이터 현황 — retrain_ready 포함</td>
-      <td><button class="try-btn" onclick="runGet('/collected','r-collected')">▶ 실행</button></td>
-    </tr>
-    <tr><td colspan="4"><div id="r-collected" class="resp-box"></div></td></tr>
-
-    <tr>
-      <td><span class="badge POST">POST</span></td>
-      <td class="ep-path">/webcam/pause</td>
-      <td>웹캠 분류 일시정지</td>
-      <td><button class="try-btn" onclick="runPost('/webcam/pause','r-pause')">▶ 실행</button></td>
-    </tr>
-    <tr><td colspan="4"><div id="r-pause" class="resp-box"></div></td></tr>
-
-    <tr>
-      <td><span class="badge POST">POST</span></td>
-      <td class="ep-path">/webcam/resume</td>
-      <td>웹캠 분류 재개</td>
-      <td><button class="try-btn" onclick="runPost('/webcam/resume','r-resume')">▶ 실행</button></td>
-    </tr>
-    <tr><td colspan="4"><div id="r-resume" class="resp-box"></div></td></tr>
-
-    <tr>
-      <td><span class="badge POST">POST</span></td>
-      <td class="ep-path">/webcam/capture</td>
-      <td>현재 프레임 캡처 저장 요청</td>
-      <td><button class="try-btn" onclick="runPost('/webcam/capture','r-capture')">▶ 실행</button></td>
-    </tr>
-    <tr><td colspan="4"><div id="r-capture" class="resp-box"></div></td></tr>
-
-    <tr>
-      <td><span class="badge GET">GET</span></td>
-      <td class="ep-path">/webcam/state</td>
-      <td>웹캠 제어 상태 조회 (paused, capture 카운트)</td>
-      <td><button class="try-btn" onclick="runGet('/webcam/state','r-wstate')">▶ 실행</button></td>
-    </tr>
-    <tr><td colspan="4"><div id="r-wstate" class="resp-box"></div></td></tr>
-
-  </tbody>
-</table>
-
-<footer>
-  <span class="dot"></span> 서버 실행 중 &nbsp;|&nbsp;
-  자동 API 문서: <a href="/docs" style="color:var(--blue)">/docs</a> &nbsp;|&nbsp;
-  <a href="/redoc" style="color:var(--blue)">/redoc</a>
-</footer>
-
 <script>
-function hl(json) {
-  return json.replace(/("(\\\\u[a-zA-Z0-9]{{4}}|\\\\[^u]|[^\\\\"])*"(\\s*:)?|\\b(true|false|null)\\b|-?\\d+\\.?\\d*)/g, m => {{
-    let c = 'json-num';
-    if (/^"/.test(m)) c = /:$/.test(m) ? 'json-key' : 'json-str';
-    else if (/true|false/.test(m)) c = 'json-bool';
-    return `<span class="${{c}}">${{m}}</span>`;
-  }});
+function hl(j){
+  return j.replace(/(\"(?:\\\\u[0-9a-fA-F]{4}|\\\\[^u]|[^\\\\\"])*\"(?:\\s*:)?|\\b(?:true|false|null)\\b|-?\\d+\\.?\\d*)/g,function(m){
+    var c='jn';
+    if(/^"/.test(m)) c=/:$/.test(m)?'jk':'js';
+    else if(/true|false/.test(m)) c='jb';
+    return '<span class="'+c+'">'+m+'</span>';
+  });
 }
-function show(id, data) {{
-  const el = document.getElementById(id);
-  el.innerHTML = hl(JSON.stringify(data, null, 2));
-  el.classList.add('show');
-}}
-async function runGet(path, rid) {{
-  try {{
-    const r = await fetch(path);
-    show(rid, await r.json());
-  }} catch(e) {{ document.getElementById(rid).textContent = '오류: ' + e.message; document.getElementById(rid).classList.add('show'); }}
-}}
-async function runPost(path, rid) {{
-  try {{
-    const r = await fetch(path, {{method:'POST'}});
-    show(rid, await r.json());
-  }} catch(e) {{ document.getElementById(rid).textContent = '오류: ' + e.message; document.getElementById(rid).classList.add('show'); }}
-}}
-async function runPredict() {{
-  const f = document.getElementById('f-predict').files[0];
-  if (!f) {{ alert('이미지를 먼저 선택하세요'); return; }}
-  const fd = new FormData(); fd.append('file', f);
-  try {{
-    const r = await fetch('/predict', {{method:'POST', body:fd}});
-    const d = await r.json(); show('r-predict', d);
-    if (d.confidence) {{
-      const pct = Math.round(d.confidence*100);
-      const color = pct>=80?'#00e676':pct>=60?'#ffab40':'#ff5252';
-      document.getElementById('conf-class').textContent = d.class_name;
-      document.getElementById('conf-class').style.color = color;
-      document.getElementById('conf-kor').textContent = d.class_kor||'';
-      document.getElementById('conf-fill').style.width = pct+'%';
-      document.getElementById('conf-fill').style.background = color;
-      document.getElementById('conf-pct').textContent = pct+'%  '+d.inference_ms+'ms';
-      document.getElementById('conf-visual').style.display='block';
-    }}
-  }} catch(e) {{ document.getElementById('r-predict').textContent='오류: '+e.message; document.getElementById('r-predict').classList.add('show'); }}
-}}
-async function runMulti() {{
-  const classes = document.getElementById('f-multi').value.split(',').map(s=>s.trim()).filter(Boolean);
-  try {{
-    const r = await fetch('/detect_multi',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{classes}})}});
-    show('r-multi', await r.json());
-  }} catch(e) {{ document.getElementById('r-multi').textContent='오류: '+e.message; document.getElementById('r-multi').classList.add('show'); }}
-}}
-
-// 자동 stats 로드
-async function loadStats() {{
-  try {{
-    const s = await (await fetch('/stats')).json();
-    if (s.avg_confidence) document.getElementById('c-conf').textContent = (s.avg_confidence*100).toFixed(1)+'%';
-    if (s.avg_latency_ms) document.getElementById('c-lat').textContent = s.avg_latency_ms.toFixed(1)+'ms';
-    document.getElementById('c-total').textContent = s.total_requests||0;
-  }} catch {{}}
-  try {{
-    const c = await (await fetch('/collected')).json();
-    const total = Object.values(c.counts||{{}}).reduce((a,b)=>a+b,0);
-    document.getElementById('c-collected').textContent = total;
-  }} catch {{}}
-  try {{
-    const h = await (await fetch('/health')).json();
-    document.getElementById('c-uptime').textContent = h.uptime||'—';
-  }} catch {{}}
-}}
-loadStats();
-setInterval(loadStats, 10000);
+function show(id,data){var e=document.getElementById(id);e.innerHTML=hl(JSON.stringify(data,null,2));e.classList.add('show');}
+async function runGet(p,id){
+  try{var r=await fetch(p);show(id,await r.json());}
+  catch(e){var el=document.getElementById(id);el.textContent='오류: '+e.message;el.classList.add('show');}
+}
+async function runPost(p,id){
+  try{var r=await fetch(p,{method:'POST'});show(id,await r.json());}
+  catch(e){var el=document.getElementById(id);el.textContent='오류: '+e.message;el.classList.add('show');}
+}
+async function runPredict(){
+  var f=document.getElementById('fp').files[0];
+  if(!f){alert('이미지를 먼저 선택하세요');return;}
+  var fd=new FormData();fd.append('file',f);
+  try{
+    var r=await fetch('/predict',{method:'POST',body:fd});
+    var d=await r.json();show('r2',d);
+    if(d.confidence){
+      var pct=Math.round(d.confidence*100);
+      var color=pct>=80?'#3fb950':pct>=60?'#d29922':'#f85149';
+      document.getElementById('conf-cls').textContent=d.class_name||'';
+      document.getElementById('conf-cls').style.color=color;
+      document.getElementById('conf-kor').textContent=d.class_kor||'';
+      document.getElementById('conf-fill').style.width=pct+'%';
+      document.getElementById('conf-fill').style.background=color;
+      document.getElementById('conf-pct').textContent=pct+'%';
+      document.getElementById('conf-pct').style.color=color;
+      document.getElementById('conf-box').classList.add('show');
+    }
+  }catch(e){var el=document.getElementById('r2');el.textContent='오류: '+e.message;el.classList.add('show');}
+}
+async function runMulti(){
+  var cls=document.getElementById('fm').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+  try{
+    var r=await fetch('/detect_multi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({classes:cls})});
+    show('r3',await r.json());
+  }catch(e){var el=document.getElementById('r3');el.textContent='오류: '+e.message;el.classList.add('show');}
+}
+async function loadCards(){
+  try{
+    var s=await(await fetch('/stats')).json();
+    if(s.avg_confidence)document.getElementById('c-conf').textContent=(s.avg_confidence*100).toFixed(1)+'%';
+    if(s.avg_latency_ms)document.getElementById('c-lat').textContent=s.avg_latency_ms.toFixed(1)+'ms';
+    document.getElementById('c-total').textContent=s.total_requests||0;
+  }catch(e){}
+  try{
+    var c=await(await fetch('/collected')).json();
+    var tot=Object.values(c.counts||{}).reduce(function(a,b){return a+b;},0);
+    document.getElementById('c-coll').textContent=tot;
+    document.getElementById('c-ready').textContent=c.retrain_ready?'Ready':'Collecting...';
+    document.getElementById('c-ready').style.color=c.retrain_ready?'#3fb950':'#d29922';
+  }catch(e){}
+  try{
+    var h=await(await fetch('/health')).json();
+    document.getElementById('c-uptime').textContent=h.uptime||'--';
+  }catch(e){}
+}
+loadCards();
+setInterval(loadCards,10000);
 </script>
 </body>
 </html>"""
@@ -423,15 +345,13 @@ setInterval(loadStats, 10000);
 
 @app.get("/", summary="서버 상태 확인", response_class=HTMLResponse)
 async def root():
-    from fastapi.responses import HTMLResponse
     uptime = str(datetime.now() - stats["start_time"]).split(".")[0]
-    model_status = "✅ 로드됨" if model is not None else "❌ 미로드"
-    return HTMLResponse(content=ROOT_HTML.format(
-        uptime=uptime,
-        model_status=model_status,
-        total=stats["total"],
-    ))
-
+    model_status = "Model Loaded" if model is not None else "Model Not Loaded"
+    html = ROOT_HTML \
+        .replace("__UPTIME__", uptime) \
+        .replace("__MODEL_STATUS__", model_status) \
+        .replace("__TOTAL__", str(stats["total"]))
+    return HTMLResponse(content=html)
 
 @app.get("/health", response_model=HealthResponse, summary="헬스체크")
 async def health():
