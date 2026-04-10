@@ -3,7 +3,19 @@
 > YOLOv8 Classification + FastAPI + Arduino IoT + Hand Gesture Control
 
 <!-- 시연 GIF — ScreenToGif으로 녹화 후 아래 경로에 업로드 -->
-<!-- ![demo](assets/demo.gif) -->
+![demo](assets/demo.gif)
+---
+![waste_project_play(1)](assets/waste_project_play(1).gif)
+---
+![waste_project_play(2)](assets/waste_project_play(2).gif)
+---
+![waste_project_play(3)](assets/waste_project_play(3).gif)
+---
+![waste_project_play(4)](assets/waste_project_play(4).gif)
+---
+![waste_project_site(1)](assets/waste_project_site(1).gif)
+---
+![waste_project_site(2)](assets/waste_project_site(2).gif)
 
 ---
 
@@ -135,7 +147,7 @@ waste_classifier/
 | **전체 Top-1** | **78.8%** |
 
 <!-- 아래 이미지는 runs/ 폴더에서 복사해서 assets/ 에 넣으세요 -->
-<!-- ![confusion_matrix](assets/confusion_matrix.png) -->
+![confusion_matrix](assets/confusion_matrix.png)
 
 ---
 
@@ -231,7 +243,7 @@ python step6_dashboard.py
 ---
 
 ## 🔌 아두이노 핀 연결
-
+![arduino_waste](assets/arduino_waste.png)
 ```
 [LED - 220Ω 저항 직렬]       [LCD I2C V2]
 D2 → 빨간 LED (캔)           A4 (SDA) → LCD SDA
