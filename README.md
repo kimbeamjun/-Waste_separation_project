@@ -18,6 +18,8 @@
 ![waste_project_site(2)](assets/waste_project_site(2).gif)
 
 ---
+![Animation](assets/Animation.gif)
+---
 
 ## 📌 프로젝트 개요
 
