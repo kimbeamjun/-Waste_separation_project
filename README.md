@@ -79,7 +79,6 @@ waste_classifier/
 │   └── dashboard.html          서버 대시보드 UI (localhost:8000)
 │
 ├── 🤖 IoT
-│   ├── step7_gesture.py        MediaPipe 손 제스처 인식 (독립 실행)
 │   ├── step8_arduino.py        아두이노 Serial 통신 · LED 제어
 │   └── arduino_led_lcd.ino     아두이노 펌웨어 (LED + LCD + 부저 + 버튼)
 │
